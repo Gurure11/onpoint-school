@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Onpoint School</title>
+  <style>
+    :root { --brand:#0f766e; --bg:#f8fafc; --text:#0f172a; --muted:#64748b; --card:#ffffff; --border:#e2e8f0; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Arial, sans-serif; background:var(--bg); color:var(--text); }
+    header { background:var(--brand); color:white; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+    header h1 { margin:0; font-size:22px; }
+    button { border:0; background:var(--brand); color:white; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600; }
+    button.secondary { background:#334155; }
+    button.light { background:white; color:var(--brand); }
+    button.danger { background:#b91c1c; }
+    input, textarea, select { width:100%; padding:10px; border:1px solid var(--border); border-radius:10px; margin:6px 0 12px; font:inherit; background:white; }
+    textarea { min-height:100px; }
+    label { font-size:13px; color:#334155; font-weight:700; }
+    .wrap { max-width:1180px; margin:0 auto; padding:24px; }
+    .grid { display:grid; gap:18px; }
+    .grid.two { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+    .grid.three { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:18px; box-shadow:0 10px 25px rgba(15,23,42,.06); }
+    .muted { color:var(--muted); }
+    .hidden { display:none !important; }
+    .tabs { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+    .tabs button { background:#e2e8f0; color:#0f172a; }
+    .tabs button.active { background:var(--brand); color:white; }
+    .progress { background:#e2e8f0; border-radius:999px; height:12px; overflow:hidden; }
+    .bar { background:var(--brand); height:100%; width:0%; transition:.25s; }
+    .course-title { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .lesson { border-top:1px solid var(--border); padding-top:14px; margin-top:14px; }
+    .video { width:100%; aspect-ratio:16/9; border:0; border-radius:14px; background:#000; }
+    .pill { display:inline-block; background:#ccfbf1; color:#115e59; padding:4px 9px; border-radius:999px; font-size:12px; font-weight:700; }
+    .quiz-option { display:flex; gap:10px; align-items:center; border:1px solid var(--border); padding:10px; border-radius:10px; margin:8px 0; }
+    .quiz-option input { width:auto; margin:0; }
+    .msg { margin:10px 0; padding:10px; border-radius:10px; background:#ecfeff; color:#155e75; }
+    @media (max-width:700px) { header { flex-direction:column; align-items:flex-start; gap:10px; } .wrap { padding:14px; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Onpoint School</h1>
+  <div id="userBox"></div>
+</header>
+
+<main class="wrap">
+  <section id="authView" class="grid two">
+    <div class="card">
+      <h2>Login</h2>
+      <p class="muted">Use your email or username.</p>
+      <label>Email or Username</label>
+      <input id="loginIdentifier" placeholder="email@domain.com or username">
+      <label>Password</label>
+      <input id="loginPassword" type="password" placeholder="Password">
+      <button onclick="login()">Login</button>
+      <div id="loginMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Register</h2>
+      <p class="muted">Register as Student or Admin. Only the first Admin can register openly.</p>
+      <label>Full Name</label>
+      <input id="regName">
+      <label>Username</label>
+      <input id="regUsername">
+      <label>Email</label>
+      <input id="regEmail">
+      <label>Password</label>
+      <input id="regPassword" type="password">
+      <label>Role</label>
+      <select id="regRole">
+        <option>Student</option>
+        <option>Admin</option>
+      </select>
+      <button onclick="register()">Create Account</button>
+      <div id="regMsg"></div>
+    </div>
+  </section>
+
+  <section id="appView" class="hidden">
+    <div class="tabs">
+      <button id="tabStudent" class="active" onclick="showTab('student')">Student Dashboard</button>
+      <button id="tabAdmin" onclick="showTab('admin')">Admin Panel</button>
+    </div>
+
+    <section id="studentView">
+      <div class="grid three" id="stats"></div>
+      <div id="courses"></div>
+    </section>
+
+    <section id="adminView" class="hidden">
+      <div class="grid two">
+        <div class="card">
+          <h2>Add Course</h2>
+          <label>Course Title</label><input id="courseTitle">
+          <label>Description</label><textarea id="courseDescription"></textarea>
+          <label>Sort Order</label><input id="courseSort" type="number" value="1">
+          <button onclick="saveCourse()">Save Course</button>
+        </div>
+
+        <div class="card">
+          <h2>Add Main Topic</h2>
+          <label>Course</label><select id="topicCourse"></select>
+          <label>Main Topic</label><input id="mainTopic">
+          <label>Description</label><textarea id="topicDescription"></textarea>
+          <label>Sort Order</label><input id="topicSort" type="number" value="1">
+          <button onclick="saveTopic()">Save Topic</button>
+        </div>
+
+        <div class="card">
+          <h2>Add Lesson / Sub Topic</h2>
+          <label>Main Topic</label><select id="lessonTopic"></select>
+          <label>Sub Topic</label><input id="subTopic">
+          <label>Lesson Text</label><textarea id="lessonText"></textarea>
+          <label>YouTube Link</label><input id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=...">
+          <label>Sort Order</label><input id="lessonSort" type="number" value="1">
+          <button onclick="saveLesson()">Save Lesson</button>
+        </div>
+
+        <div class="card">
+          <h2>Add Quiz</h2>
+          <label>Main Topic</label><select id="quizTopic"></select>
+          <label>Quiz Title</label><input id="quizTitle">
+          <label>Pass Mark %</label><input id="passMark" type="number" value="60">
+          <button onclick="saveQuiz()">Save Quiz</button>
+          <hr>
+          <h3>Add Question</h3>
+          <label>Quiz</label><select id="questionQuiz"></select>
+          <label>Question</label><textarea id="question"></textarea>
+          <label>Option A</label><input id="optionA">
+          <label>Option B</label><input id="optionB">
+          <label>Option C</label><input id="optionC">
+          <label>Option D</label><input id="optionD">
+          <label>Correct Option</label>
+          <select id="correctOption"><option>A</option><option>B</option><option>C</option><option>D</option></select>
+          <label>Sort Order</label><input id="questionSort" type="number" value="1">
+          <button onclick="saveQuestion()">Save Question</button>
+        </div>
+      </div>
+      <div id="adminMsg"></div>
+    </section>
+  </section>
+</main>
+
+<script>
+let currentUser = JSON.parse(localStorage.getItem('onpointUser') || 'null');
+let appData = { courses: [] };
+
+function callApi(action, payload) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(res => res && res.ok ? resolve(res) : reject(new Error((res && res.error) || 'Unknown error')))
+      .withFailureHandler(err => reject(err))
+      .api(action, payload || {});
+  });
+}
+
+function setMsg(id, text) {
+  document.getElementById(id).innerHTML = text ? `<div class="msg">${text}</div>` : '';
+}
+
+function logout() {
+  localStorage.removeItem('onpointUser');
+  currentUser = null;
+  location.reload();
+}
+
+async function register() {
+  try {
+    const res = await callApi('register', {
+      name: val('regName'), username: val('regUsername'), email: val('regEmail'),
+      password: val('regPassword'), role: val('regRole')
+    });
+    currentUser = res.user;
+    localStorage.setItem('onpointUser', JSON.stringify(currentUser));
+    await boot();
+  } catch(e) { setMsg('regMsg', e.message); }
+}
+
+async function login() {
+  try {
+    const res = await callApi('login', {
+      identifier: val('loginIdentifier'),
+      password: val('loginPassword')
+    });
+    currentUser = res.user;
+    localStorage.setItem('onpointUser', JSON.stringify(currentUser));
+    await boot();
+  } catch(e) { setMsg('loginMsg', e.message); }
+}
+
+async function boot() {
+  if (!currentUser) return;
+  document.getElementById('authView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');
+  document.getElementById('userBox').innerHTML =
+    `<span>${currentUser.name} <span class="pill">${currentUser.role}</span></span> <button class="light" onclick="logout()">Logout</button>`;
+
+  document.getElementById('tabAdmin').style.display = currentUser.role === 'Admin' ? 'inline-block' : 'none';
+
+  const res = await callApi('getBootstrap', { userId: currentUser.userId });
+  appData.courses = res.courses;
+  renderStudent();
+  renderAdminSelectors();
+}
+
+function renderStudent() {
+  const totalLessons = appData.courses.reduce((n,c)=>n+c.totalLessons,0);
+  const completed = appData.courses.reduce((n,c)=>n+c.completedLessons,0);
+  const percent = totalLessons ? Math.round(completed/totalLessons*100) : 0;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="card"><h3>Total Lessons</h3><h2>${totalLessons}</h2></div>
+    <div class="card"><h3>Lessons Completed</h3><h2>${completed}</h2></div>
+    <div class="card"><h3>Overall Progress</h3><h2>${percent}%</h2><div class="progress"><div class="bar" style="width:${percent}%"></div></div></div>
+  `;
+
+  document.getElementById('courses').innerHTML = appData.courses.map(course => `
+    <div class="card">
+      <div class="course-title">
+        <div>
+          <h2>${esc(course.courseTitle)}</h2>
+          <p class="muted">${esc(course.description || '')}</p>
+        </div>
+        <div><b>${course.percent}%</b></div>
+      </div>
+      <div class="progress"><div class="bar" style="width:${course.percent}%"></div></div>
+      ${course.topics.map(renderTopic).join('')}
+    </div>
+  `).join('');
+}
+
+function renderTopic(topic) {
+  return `
+    <div class="lesson">
+      <h3>Main Topic: ${esc(topic.mainTopic)}</h3>
+      <p class="muted">${esc(topic.description || '')}</p>
+      ${topic.lessons.map(renderLesson).join('')}
+      ${topic.quiz ? renderQuiz(topic.quiz) : ''}
+    </div>
+  `;
+}
+
+function renderLesson(lesson) {
+  const done = lesson.progress && lesson.progress.status === 'done';
+  const embed = youtubeEmbed(lesson.youtubeUrl);
+  return `
+    <div class="card">
+      <h4>Sub Topic: ${esc(lesson.subTopic)}</h4>
+      ${lesson.lessonText ? `<p>${esc(lesson.lessonText).replace(/\n/g,'<br>')}</p>` : ''}
+      ${embed ? `<iframe class="video" src="${embed}" allowfullscreen></iframe>` : ''}
+      <p>${done ? '<span class="pill">Completed</span>' : '<span class="pill">In progress</span>'}</p>
+      <button onclick="markLesson('${lesson.lessonId}', 'done')">${done ? 'Mark Again' : 'Mark Lesson Done'}</button>
+    </div>
+  `;
+}
+
+function renderQuiz(quiz) {
+  const attempt = quiz.attempt;
+  return `
+    <div class="card">
+      <h3>Quiz: ${esc(quiz.quizTitle)}</h3>
+      ${attempt ? `<p class="pill">Last score: ${attempt.score}/${attempt.total} - ${attempt.passed === 'TRUE' ? 'Passed' : 'Not passed'}</p>` : ''}
+      ${quiz.questions.map((q, i) => `
+        <div>
+          <h4>${i+1}. ${esc(q.question)}</h4>
+          ${['A','B','C','D'].map(opt => `
+            <label class="quiz-option">
+              <input type="radio" name="q_${q.questionId}" value="${opt}">
+              ${opt}. ${esc(q['option'+opt])}
+            </label>
+          `).join('')}
+        </div>
+      `).join('')}
+      <button onclick="submitQuiz('${quiz.quizId}')">Submit Quiz</button>
+      <div id="quizMsg_${quiz.quizId}"></div>
+    </div>
+  `;
+}
+
+async function markLesson(lessonId, status) {
+  await callApi('markLesson', { userId: currentUser.userId, lessonId, status });
+  await boot();
+}
+
+async function submitQuiz(quizId) {
+  const quiz = findQuiz(quizId);
+  const answers = {};
+  quiz.questions.forEach(q => {
+    const selected = document.querySelector(`input[name="q_${q.questionId}"]:checked`);
+    if (selected) answers[q.questionId] = selected.value;
+  });
+  try {
+    const res = await callApi('submitQuiz', { userId: currentUser.userId, quizId, answers });
+    setMsg(`quizMsg_${quizId}`, `Score: ${res.score}/${res.total} (${res.percent}%). ${res.passed ? 'Passed' : 'Not passed'}.`);
+    await boot();
+  } catch(e) { setMsg(`quizMsg_${quizId}`, e.message); }
+}
+
+function findQuiz(quizId) {
+  for (const c of appData.courses) for (const t of c.topics) if (t.quiz && t.quiz.quizId === quizId) return t.quiz;
+}
+
+function renderAdminSelectors() {
+  const courseOptions = appData.courses.map(c => `<option value="${c.courseId}">${esc(c.courseTitle)}</option>`).join('');
+  document.getElementById('topicCourse').innerHTML = courseOptions;
+
+  const topics = appData.courses.flatMap(c => c.topics.map(t => ({...t, courseTitle:c.courseTitle})));
+  const topicOptions = topics.map(t => `<option value="${t.topicId}">${esc(t.courseTitle)} - ${esc(t.mainTopic)}</option>`).join('');
+  ['lessonTopic','quizTopic'].forEach(id => document.getElementById(id).innerHTML = topicOptions);
+
+  const quizzes = topics.filter(t => t.quiz).map(t => t.quiz);
+  document.getElementById('questionQuiz').innerHTML = quizzes.map(q => `<option value="${q.quizId}">${esc(q.quizTitle)}</option>`).join('');
+}
+
+async function saveCourse() {
+  await adminCall('adminSaveCourse', { courseTitle:val('courseTitle'), description:val('courseDescription'), sortOrder:val('courseSort') });
+}
+async function saveTopic() {
+  await adminCall('adminSaveTopic', { courseId:val('topicCourse'), mainTopic:val('mainTopic'), description:val('topicDescription'), sortOrder:val('topicSort') });
+}
+async function saveLesson() {
+  await adminCall('adminSaveLesson', { topicId:val('lessonTopic'), subTopic:val('subTopic'), lessonText:val('lessonText'), youtubeUrl:val('youtubeUrl'), sortOrder:val('lessonSort') });
+}
+async function saveQuiz() {
+  await adminCall('adminSaveQuiz', { topicId:val('quizTopic'), quizTitle:val('quizTitle'), passMark:val('passMark') });
+}
+async function saveQuestion() {
+  await adminCall('adminSaveQuestion', {
+    quizId:val('questionQuiz'), question:val('question'), optionA:val('optionA'), optionB:val('optionB'),
+    optionC:val('optionC'), optionD:val('optionD'), correctOption:val('correctOption'), sortOrder:val('questionSort')
+  });
+}
+
+async function adminCall(action, payload) {
+  try {
+    payload.userId = currentUser.userId;
+    await callApi(action, payload);
+    setMsg('adminMsg', 'Saved successfully.');
+    await boot();
+  } catch(e) { setMsg('adminMsg', e.message); }
+}
+
+function showTab(tab) {
+  document.getElementById('studentView').classList.toggle('hidden', tab !== 'student');
+  document.getElementById('adminView').classList.toggle('hidden', tab !== 'admin');
+  document.getElementById('tabStudent').classList.toggle('active', tab === 'student');
+  document.getElementById('tabAdmin').classList.toggle('active', tab === 'admin');
+}
+
+function youtubeEmbed(url) {
+  if (!url) return '';
+  const s = String(url);
+  let id = '';
+  if (s.includes('youtube.com/watch?v=')) id = s.split('v=')[1].split('&')[0];
+  else if (s.includes('youtu.be/')) id = s.split('youtu.be/')[1].split('?')[0];
+  else if (s.includes('youtube.com/embed/')) id = s.split('embed/')[1].split('?')[0];
+  return id ? `https://www.youtube.com/embed/${id}` : '';
+}
+
+function val(id) { return document.getElementById(id).value.trim(); }
+function esc(s) { return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+
+boot();
+</script>
+</body>
+</html>
