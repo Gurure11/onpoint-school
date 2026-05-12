@@ -81,6 +81,10 @@
     .message.error{display:block;background:#fee2e2;color:#991b1b}
     .message.success{display:block;background:#dcfce7;color:#166534}
     .muted{color:var(--muted)}
+    .enrollment-card{border-left:6px solid var(--accent);margin-bottom:12px}
+    .student-row{display:grid;grid-template-columns:1.3fr 1fr auto;gap:12px;align-items:center;border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;background:#fff}
+    .role-note{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:14px;padding:12px;color:#475569;margin-bottom:14px}
+    .link-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;word-break:break-all;color:#1d4ed8;font-weight:700;margin-bottom:12px}
     @media(max-width:900px){.login-page{grid-template-columns:1fr}.hero{padding:34px}.hero h1{font-size:34px}.feature-grid,.stats{grid-template-columns:1fr}.main{padding:18px}iframe{height:240px}}
   </style>
 </head>
@@ -161,18 +165,22 @@
             <label>Course Name</label><input id="newCourseName">
             <label>Description</label><textarea id="newCourseDescription"></textarea>
             <label>Category</label><input id="newCourseCategory">
+            <label>Course Access</label><select id="newCourseAccess"><option value="FREE">FREE</option><option value="PAID">PAID</option></select>
             <label>Price</label><input id="newCoursePrice" type="number" value="0">
+            <button class="secondary" onclick="setCourseFreePaid()">Set Free / Paid</button>
             <label>Thumbnail URL</label><input id="newCourseThumbnail">
             <button onclick="createCourse()">Save Course</button>
             <div id="courseMessage" class="message"></div>
           </div>
           <div class="card">
             <h2>Lesson Upload</h2>
+            <div class="role-note">Only ADMIN and TEACHER users can upload lessons.</div>
             <label>Course ID</label><input id="lessonCourseId">
             <label>Lesson Title</label><input id="lessonTitle">
             <label>Lesson Type</label><select id="lessonType"><option>TEXT</option><option>VIDEO</option></select>
             <label>Text Content</label><textarea id="lessonContent"></textarea>
-            <label>YouTube Video Link</label><input id="lessonVideo">
+            <label>Video Link / YouTube Link</label><input id="lessonVideo" placeholder="Paste YouTube link or video URL">
+            <div id="lessonVideoLinkPreview" class="link-box hidden"></div>
             <button onclick="createLesson()">Save Lesson</button>
             <div id="lessonMessage" class="message"></div>
           </div>
@@ -208,6 +216,17 @@
             <label>Message</label><textarea id="waMessage"></textarea>
             <button onclick="saveWhatsAppNotification()">Save Notification</button>
             <p class="muted">This logs messages. Connect Twilio/WhatsApp Cloud API keys in Apps Script to send automatically.</p>
+          </div>
+          <div class="card" id="adminEnrollmentCard">
+            <h2>Student Enrollment Approvals</h2>
+            <button onclick="loadEnrollmentRequests()">Load Pending Approvals</button>
+            <div id="enrollmentRequests" style="margin-top:12px"><p class="muted">No approvals loaded.</p></div>
+          </div>
+          <div class="card" id="adminStudentProgressCard">
+            <h2>All Enrolled Students</h2>
+            <button onclick="loadAdminStudents()">Load Students</button>
+            <div id="adminStudentsList" style="margin-top:12px"><p class="muted">No students loaded.</p></div>
+            <div id="adminStudentDetail" style="margin-top:18px"></div>
           </div>
         </div>
       </section>
@@ -245,7 +264,7 @@
   </section>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx29NTMTX_m5BSQ5ZeGypsLTIO-6lhCW4fYOXd7gubVpSOCYRjdeleu-uqEQhCifrNg/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDXPP3ljqi904JLIR8wwugLXEnvRN-M753BDvxcuec7t2kYtVyBgYEilkjXag3weUUXQ/exec";
 let currentUser = null;
 let latestCourses = [];
 
@@ -388,11 +407,33 @@ function showApp(){
   document.getElementById("userPill").classList.remove("hidden");
   document.getElementById("logoutBtn").classList.remove("hidden");
   document.getElementById("userPill").textContent=(currentUser.name||currentUser.username)+" • "+(currentUser.role||"STUDENT");
+  applyRolePermissions();
+}
+function userRole(){return String(currentUser&&currentUser.role||"STUDENT").toUpperCase();}
+function isAdmin(){return userRole()==="ADMIN";}
+function isTeacher(){return userRole()==="TEACHER";}
+function canUploadLessons(){return isAdmin()||isTeacher();}
+function applyRolePermissions(){
+  const role=userRole();
+  const teacherTab=document.querySelector("button[onclick*=\"teacherView\"]");
+  const adminTab=document.querySelector("button[onclick*=\"adminView\"]");
+  const paymentsTab=document.querySelector("button[onclick*=\"paymentsView\"]");
+  const liveTab=document.querySelector("button[onclick*=\"liveView\"]");
+  if(teacherTab)teacherTab.classList.toggle("hidden",!canUploadLessons());
+  if(adminTab)adminTab.classList.toggle("hidden",!isAdmin());
+  if(paymentsTab)paymentsTab.classList.toggle("hidden",!isAdmin());
+  if(liveTab)liveTab.classList.toggle("hidden",!canUploadLessons());
 }
 async function loadDashboard(){await loadCourses();loadProgress();}
 async function loadCourses(){
   let data;
-  try{data=await api("getCourses");}catch(e){data={success:true,courses:demoCourses()};}
+  try{
+    if(userRole()==="STUDENT"){
+      data=await api("getStudentCourses",{userId:currentUser.userId});
+    }else{
+      data=await api("getCourses");
+    }
+  }catch(e){data={success:true,courses:demoCourses()};}
   latestCourses=data.courses||demoCourses();
   document.getElementById("statCourses").textContent=latestCourses.length;
   renderCourses("coursesList",latestCourses);
@@ -407,7 +448,11 @@ function renderCourses(target,courses){
     const description=c.description||c.DESCRIPTION||"";
     const price=Number(c.price||c.PRICE||0);
     const thumbUrl=normaliseThumbnailUrl(getCourseThumbnail(c));
-    return `<div class="card course-card"><div class="course-thumb" id="thumb_${target}_${courseId}" onclick="openCourse('${courseId}',this)">${courseThumbWithPlay(thumbUrl,name)}</div><div class="course-body"><h3>${name}</h3><p>${description}</p><span class="badge ${price>0?"paid":""}">${price>0?"PAID R"+price:"FREE"}</span><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><button onclick="openCourse('${courseId}',this)">Start Now</button></div></div>`;
+    const status=String(c.enrollmentStatus||c.status||"").toUpperCase();
+    const canStart=userRole()!=="STUDENT" || status==="APPROVED";
+    const action=canStart?`<button onclick="openCourse('${courseId}',this)">Start Now</button>`:`<button onclick="requestEnrollment('${courseId}',this)">Request Admin Approval</button>`;
+    const adminActions=isAdmin()?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="secondary" onclick="setCourseAccess('${courseId}','FREE',this)">Free</button><button class="secondary" onclick="setCourseAccess('${courseId}','PAID',this)">Paid</button></div>`:"";
+    return `<div class="card course-card"><div class="course-thumb" id="thumb_${target}_${courseId}" onclick="${canStart?`openCourse('${courseId}',this)`:`requestEnrollment('${courseId}',this)`}">${courseThumbWithPlay(thumbUrl,name)}</div><div class="course-body"><h3>${name}</h3><p>${description}</p><span class="badge ${price>0?"paid":""}">${price>0?"PAID R"+price:"FREE"}</span>${status&&userRole()==="STUDENT"?` <span class="badge ${status==="APPROVED"?"":"paid"}">${status}</span>`:""}<div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div>${action}${adminActions}</div></div>`;
   }).join("");
   hydrateYouTubeThumbnails(target,courses);
 }
@@ -430,6 +475,14 @@ async function hydrateYouTubeThumbnails(target,courses){
 }
 async function openCourse(courseId,btn){
   beginSync(btn,"Synchronising");
+  if(userRole()==="STUDENT"){
+    const course=(latestCourses||[]).find(c=>String(getCourseId(c))===String(courseId));
+    if(course && String(course.enrollmentStatus||"").toUpperCase()!=="APPROVED"){
+      alert("This lesson needs Admin approval before you can start.");
+      endSync(btn);
+      return;
+    }
+  }
   showTab("coursesView",document.querySelectorAll(".tab")[1]);
   const lessonArea=document.getElementById("lessonArea");
   if(!courseId){
@@ -518,8 +571,8 @@ function youtubeEmbed(url){
 async function markLesson(courseId,lessonId){await api("saveProgress",{userId:currentUser.userId,courseId,lessonId,status:"COMPLETED",score:0});alert("Lesson marked complete.");loadProgress();}
 function answerQuiz(id,selected,answer){alert(selected===answer?"Correct answer!":"Incorrect answer. Correct answer is "+answer);}
 function loadProgress(){document.getElementById("statLessons").textContent="0";document.getElementById("statScore").textContent="0%";document.getElementById("statAttendance").textContent="0%";document.getElementById("overallProgress").style.width="0%";document.getElementById("overallProgressText").textContent="0%";}
-async function createCourse(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{const data=await api("createCourse",{courseName:val("newCourseName"),description:val("newCourseDescription"),category:val("newCourseCategory"),price:val("newCoursePrice"),thumbnail:val("newCourseThumbnail")});showMsg("courseMessage",data.message||"Course saved.");loadCourses();}finally{endSync(btn);}}
-async function createLesson(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{const data=await api("createLesson",{courseId:val("lessonCourseId"),title:val("lessonTitle"),lessonType:val("lessonType"),content:val("lessonContent"),videoLink:val("lessonVideo")});showMsg("lessonMessage",data.message||"Lesson saved.");}finally{endSync(btn);}}
+async function createCourse(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{if(!canUploadLessons()){alert("Only Admin and Teachers can upload courses.");return;}const access=val("newCourseAccess");const price=access==="FREE"?0:val("newCoursePrice");const data=await api("createCourse",{courseName:val("newCourseName"),description:val("newCourseDescription"),category:val("newCourseCategory"),price:price,access:access,thumbnail:val("newCourseThumbnail"),createdBy:currentUser.userId});showMsg("courseMessage",data.message||"Course saved.");loadCourses();}finally{endSync(btn);}}
+async function createLesson(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{if(!canUploadLessons()){alert("Only Admin and Teachers can upload lessons.");return;}const video=val("lessonVideo");const data=await api("createLesson",{courseId:val("lessonCourseId"),title:val("lessonTitle"),lessonType:val("lessonType"),content:val("lessonContent"),videoLink:video,createdBy:currentUser.userId});showMsg("lessonMessage",data.message||"Lesson saved.");const preview=document.getElementById("lessonVideoLinkPreview");if(preview&&video){preview.textContent=video;preview.classList.remove("hidden");}}finally{endSync(btn);}}
 async function createAssignment(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createAssignment",{courseId:val("assignmentCourseId"),title:val("assignmentTitle"),instructions:val("assignmentInstructions")});alert("Assignment created.");}finally{endSync(btn);}}
 async function loadUsers(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{const data=await api("getUsers");const users=data.users||[];document.getElementById("usersBody").innerHTML=users.length?users.map(u=>`<tr><td>${u.fullName}</td><td>${u.username}</td><td>${u.email}</td><td>${u.role}</td><td>${u.status}</td></tr>`).join(""):`<tr><td colspan="5">No users found.</td></tr>`;}finally{endSync(btn);}}
 async function createUser(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createUser",{fullName:val("userFullName"),username:val("userUsername"),email:val("userEmail"),password:val("userPassword"),role:val("userRole")});alert("User created.");}finally{endSync(btn);}}
@@ -527,6 +580,65 @@ async function saveWhatsAppNotification(){const btn=buttonFromEvent();beginSync(
 async function recordPayment(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("recordPayment",{userId:currentUser.userId,courseId:val("payCourseId"),amount:val("payAmount"),method:val("payMethod")});alert("Payment recorded.");}finally{endSync(btn);}}
 async function createLiveClass(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createLiveClass",{title:val("liveTitle"),courseId:val("liveCourseId"),zoomLink:val("liveZoom"),dateTime:val("liveDate")});alert("Live class saved.");}finally{endSync(btn);}}
 async function saveAttendance(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("saveAttendance",{userId:currentUser.userId,courseId:val("attCourseId"),status:val("attStatus")});alert("Attendance saved.");}finally{endSync(btn);}}
+
+function setCourseFreePaid(){
+  const access=val("newCourseAccess");
+  const price=document.getElementById("newCoursePrice");
+  if(price && access==="FREE")price.value=0;
+  if(price && access==="PAID" && Number(price.value||0)===0)price.value=1;
+}
+async function setCourseAccess(courseId,access,btn){
+  beginSync(btn,"Synchronising");
+  try{
+    await api("setCourseAccess",{courseId,access});
+    alert("Course set to "+access+".");
+    await loadCourses();
+  }finally{endSync(btn);}
+}
+async function requestEnrollment(courseId,btn){
+  beginSync(btn,"Synchronising");
+  try{
+    const data=await api("requestEnrollment",{userId:currentUser.userId,courseId});
+    alert(data.message||"Approval request sent to Admin.");
+    await loadCourses();
+  }finally{endSync(btn);}
+}
+async function loadEnrollmentRequests(){
+  const btn=buttonFromEvent();beginSync(btn,"Synchronising");
+  try{
+    const data=await api("getEnrollmentRequests",{adminId:currentUser.userId});
+    const box=document.getElementById("enrollmentRequests");
+    const rows=data.requests||[];
+    box.innerHTML=rows.length?rows.map(r=>`<div class="card enrollment-card"><h3>${r.studentName||r.userId}</h3><p class="muted">Course: ${r.courseName||r.courseId}<br>Status: ${r.status}</p><button class="success" onclick="approveEnrollment('${r.enrollmentId}','APPROVED',this)">Approve</button> <button class="danger" onclick="approveEnrollment('${r.enrollmentId}','REJECTED',this)">Reject</button></div>`).join(""):"<p class='muted'>No pending approvals.</p>";
+  }finally{endSync(btn);}
+}
+async function approveEnrollment(enrollmentId,status,btn){
+  beginSync(btn,"Synchronising");
+  try{
+    await api("approveEnrollment",{enrollmentId,status,adminId:currentUser.userId});
+    alert("Enrollment "+status+".");
+    await loadEnrollmentRequests();
+  }finally{endSync(btn);}
+}
+async function loadAdminStudents(){
+  const btn=buttonFromEvent();beginSync(btn,"Synchronising");
+  try{
+    const data=await api("getAdminStudents",{adminId:currentUser.userId});
+    const box=document.getElementById("adminStudentsList");
+    const students=data.students||[];
+    box.innerHTML=students.length?students.map(s=>`<div class="student-row"><div><strong>${s.name}</strong><br><span class="muted">${s.email||""}</span></div><div><div class="progress"><div class="progress-fill" style="width:${s.progress||0}%"></div></div><strong>${s.progress||0}%</strong></div><button onclick="openAdminStudent('${s.userId}',this)">Open</button></div>`).join(""):"<p class='muted'>No enrolled students found.</p>";
+  }finally{endSync(btn);}
+}
+async function openAdminStudent(userId,btn){
+  beginSync(btn,"Synchronising");
+  try{
+    const data=await api("getStudentDetail",{userId});
+    const box=document.getElementById("adminStudentDetail");
+    const courses=data.courses||[];
+    box.innerHTML=`<div class="card"><h2>${data.studentName||"Student"} Studies</h2>${courses.length?courses.map(c=>`<div class="lesson"><h3>${c.courseName}</h3><p class="muted">Status: ${c.status}</p><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><strong>${c.progress||0}%</strong></div>`).join(""):"<p class='muted'>No studies found.</p>"}</div>`;
+  }finally{endSync(btn);}
+}
+
 function val(id){return document.getElementById(id).value;}
 window.addEventListener("load",()=>{const saved=localStorage.getItem("op_school_user");if(saved){currentUser=JSON.parse(saved);showApp();loadDashboard();}});
 </script>
