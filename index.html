@@ -52,7 +52,10 @@
     .stat strong{font-size:30px}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
     .course-card{overflow:hidden;padding:0}
-    .course-thumb{height:170px;background:#dbeafe;display:grid;place-items:center;color:#1d4ed8;font-weight:900}
+    .course-thumb{height:170px;background:#dbeafe;display:grid;place-items:center;color:#1d4ed8;font-weight:900;position:relative;cursor:pointer;overflow:hidden}
+    .course-thumb:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,23,42,0),rgba(15,23,42,.42));pointer-events:none}
+    .course-play{position:absolute;z-index:2;display:grid;place-items:center;width:58px;height:58px;border-radius:999px;background:rgba(15,23,42,.84);color:white;font-size:21px;box-shadow:0 12px 25px rgba(0,0,0,.28)}
+    .course-start-label{position:absolute;z-index:2;left:12px;bottom:12px;background:rgba(15,23,42,.84);color:white;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:900}
     .course-body{padding:20px}
     .badge{display:inline-flex;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;background:#dcfce7;color:#166534}
     .badge.paid{background:#fef3c7;color:#92400e}
@@ -275,7 +278,7 @@ function endSync(btn){
 function buttonFromEvent(){return (typeof event!=="undefined" && event && event.currentTarget) ? event.currentTarget : null;}
 function getCourseId(c){return c.courseId||c.id||c.COURSE_ID||c.course_id||"";}
 function getCourseName(c){return c.courseName||c.title||c.COURSE_NAME||c.course_name||"Untitled Course";}
-function getCourseThumbnail(c){return c.thumbnail||c.THUMBNAIL||c.thumbnailUrl||c.image||c.videoLink||c.VIDEO_LINK||c.youtube||c.YOUTUBE_LINK||"";}
+function getCourseThumbnail(c){return c.thumbnail||c.THUMBNAIL||c.thumbnailUrl||c.image||"";}
 function normaliseThumbnailUrl(url){
   url=String(url||"").trim();
   if(!url)return "";
@@ -307,6 +310,14 @@ function thumbnailHtml(c){
 }
 function isScriptUrlReady(){
   return SCRIPT_URL && !SCRIPT_URL.includes("PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE");
+}
+const courseVideoCache = {};
+function firstVideoLesson(lessons){
+  return (lessons||[]).map(normaliseLesson).find(l=>extractYouTubeId(l.videoLink));
+}
+function courseThumbWithPlay(url,name){
+  if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span>`;
+  return `<img src="${url}" alt="${name}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
 }
 
 async function login(){
@@ -346,30 +357,27 @@ function renderCourses(target,courses){
     const name=getCourseName(c);
     const description=c.description||c.DESCRIPTION||"";
     const price=Number(c.price||c.PRICE||0);
-    return `<div class="card course-card"><div class="course-thumb" id="thumb_${target}_${courseId}">${thumbnailHtml(c)}</div><div class="course-body"><h3>${name}</h3><p>${description}</p><span class="badge ${price>0?"paid":""}">${price>0?"PAID R"+price:"FREE"}</span><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><button onclick="openCourse('${courseId}',this)">Start Now</button></div></div>`;
+    const thumbUrl=normaliseThumbnailUrl(getCourseThumbnail(c));
+    return `<div class="card course-card"><div class="course-thumb" id="thumb_${target}_${courseId}" onclick="openCourse('${courseId}',this)">${courseThumbWithPlay(thumbUrl,name)}</div><div class="course-body"><h3>${name}</h3><p>${description}</p><span class="badge ${price>0?"paid":""}">${price>0?"PAID R"+price:"FREE"}</span><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><button onclick="openCourse('${courseId}',this)">Start Now</button></div></div>`;
   }).join("");
   hydrateYouTubeThumbnails(target,courses);
 }
 async function hydrateYouTubeThumbnails(target,courses){
   if(!isScriptUrlReady())return;
-  for(const c of courses){
+  await Promise.all((courses||[]).map(async c=>{
     const courseId=getCourseId(c);
     const thumb=document.getElementById("thumb_"+target+"_"+courseId);
-    if(!thumb || !thumb.querySelector("[data-thumb-placeholder]"))continue;
+    if(!thumb)return;
     try{
-      thumb.classList.add("loading");
-      thumb.textContent="Loading thumbnail...";
       const data=await api("getLessons",{courseId});
-      const lesson=(data.lessons||[]).find(l=>extractYouTubeId(l.videoLink||l.VIDEO_LINK||""));
-      const id=lesson?extractYouTubeId(lesson.videoLink||lesson.VIDEO_LINK):"";
-      thumb.classList.remove("loading");
-      if(id)thumb.innerHTML=`<img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" alt="${getCourseName(c)}" onerror="this.parentNode.innerHTML='ONPOINT'">`;
-      else thumb.innerHTML="ONPOINT";
-    }catch(e){
-      thumb.classList.remove("loading");
-      thumb.innerHTML="ONPOINT";
-    }
-  }
+      const lesson=firstVideoLesson(data.lessons||[]);
+      if(lesson){
+        courseVideoCache[courseId]=lesson;
+        const id=extractYouTubeId(lesson.videoLink);
+        if(id)thumb.innerHTML=`<img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" alt="${getCourseName(c)}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+      }
+    }catch(e){}
+  }));
 }
 async function openCourse(courseId,btn){
   beginSync(btn,"Synchronising");
@@ -391,7 +399,10 @@ async function openCourse(courseId,btn){
   try{quizData=await api("getQuiz",{courseId});}catch(e){quizData={quiz:[]};}
   const lessons=(lessonsData.lessons||[]).map(normaliseLesson);
   const quiz=(quizData.quiz||[]).map(normaliseQuiz);
-  if(lessonArea)lessonArea.innerHTML=`<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons found for this course yet. Check that LESSONS COURSE_ID matches this course: "+courseId+"</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
+  const firstVideo=courseVideoCache[courseId]||firstVideoLesson(lessons);
+  if(firstVideo)courseVideoCache[courseId]=firstVideo;
+  const player=firstVideo?`<div class="card lesson"><h2>${firstVideo.title}</h2><p>${firstVideo.content||""}</p><div class="lesson-video"><iframe src="${youtubeEmbed(firstVideo.videoLink)}?autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>`:"";
+  if(lessonArea)lessonArea.innerHTML=`${player}<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons found for this course yet. Check that LESSONS COURSE_ID matches this course: "+courseId+"</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
   endSync(btn);
 }
 function normaliseLesson(l){
