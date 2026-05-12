@@ -36,6 +36,10 @@
     button.success{background:var(--success)}
     button.danger{background:var(--danger)}
     button.dark{background:var(--primary)}
+    button.syncing{opacity:.75;pointer-events:none;position:relative}
+    button.syncing:after{content:"";display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;margin-left:8px;vertical-align:-2px;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .course-thumb img{width:100%;height:100%;object-fit:cover;display:block}
     .app{display:none}
     .main{max-width:1360px;margin:0 auto;padding:26px}
     .tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
@@ -238,18 +242,63 @@ function api(action, params={}){
   return fetch(SCRIPT_URL + "?" + q.toString()).then(r => r.json());
 }
 function showMsg(id,text,type="success"){const el=document.getElementById(id); if(!el)return; el.textContent=text; el.className="message "+type;}
-function showTab(id,btn){document.querySelectorAll("main section").forEach(s=>s.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));if(btn)btn.classList.add("active");}
+function showTab(id,btn){
+  ["dashboardView","coursesView","teacherView","adminView","paymentsView","liveView"].forEach(viewId=>{
+    const view=document.getElementById(viewId);
+    if(view)view.classList.add("hidden");
+  });
+  const target=document.getElementById(id);
+  if(target)target.classList.remove("hidden");
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+  if(btn)btn.classList.add("active");
+}
 function logout(){localStorage.removeItem("op_school_user");location.reload();}
+function beginSync(btn,text){
+  if(!btn)return null;
+  const old=btn.textContent;
+  btn.dataset.oldText=old;
+  btn.textContent=text||"Synchronising";
+  btn.disabled=true;
+  btn.classList.add("syncing");
+  return old;
+}
+function endSync(btn){
+  if(!btn)return;
+  btn.textContent=btn.dataset.oldText||btn.textContent;
+  btn.disabled=false;
+  btn.classList.remove("syncing");
+}
+function buttonFromEvent(){return (typeof event!=="undefined" && event && event.currentTarget) ? event.currentTarget : null;}
+function getCourseId(c){return c.courseId||c.id||c.COURSE_ID||c.course_id||"";}
+function getCourseName(c){return c.courseName||c.title||c.COURSE_NAME||c.course_name||"Untitled Course";}
+function getCourseThumbnail(c){return c.thumbnail||c.THUMBNAIL||c.thumbnailUrl||c.image||"";}
+function normaliseThumbnailUrl(url){
+  url=String(url||"").trim();
+  if(!url)return "";
+  const driveMatch=url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if(driveMatch)return "https://drive.google.com/uc?export=view&id="+driveMatch[1];
+  const openMatch=url.match(/[?&]id=([^&]+)/);
+  if(url.includes("drive.google.com")&&openMatch)return "https://drive.google.com/uc?export=view&id="+openMatch[1];
+  return url;
+}
+function thumbnailHtml(c){
+  const url=normaliseThumbnailUrl(getCourseThumbnail(c));
+  if(!url)return "ONPOINT";
+  return `<img src="${url}" alt="${getCourseName(c)}" onerror="this.parentNode.innerHTML='ONPOINT'">`;
+}
 
 async function login(){
+  const btn=buttonFromEvent();
+  beginSync(btn,"Synchronising");
   const username=document.getElementById("loginName").value.trim();
   const password=document.getElementById("loginPassword").value;
-  if(!username||!password){showMsg("loginMessage","Enter username/email and password.","error");return;}
+  if(!username||!password){showMsg("loginMessage","Enter username/email and password.","error");endSync(btn);return;}
   try{
     const data=await api("login",{username,password});
     if(data.success){currentUser=data.user;localStorage.setItem("op_school_user",JSON.stringify(currentUser));showApp();loadDashboard();}
     else showMsg("loginMessage",data.message||"Invalid login.","error");
   }catch(e){showMsg("loginMessage","Could not connect to Apps Script. Paste your deployed Web App URL into SCRIPT_URL.","error");}
+  finally{endSync(btn);}
 }
 function showApp(){
   document.getElementById("loginPage").style.display="none";
@@ -270,16 +319,26 @@ async function loadCourses(){
 function demoCourses(){return[{courseId:"C001",courseName:"Safety Training",description:"Workplace safety and compliance.",category:"Safety",price:0,thumbnail:""},{courseId:"C002",courseName:"Leadership Basics",description:"Professional management training.",category:"Management",price:0,thumbnail:""}];}
 function renderCourses(target,courses){
   const el=document.getElementById(target); if(!el)return;
-  el.innerHTML=courses.map(c=>`<div class="card course-card"><div class="course-thumb">${c.thumbnail?`<img src="${c.thumbnail}" style="width:100%;height:100%;object-fit:cover">`:"ONPOINT"}</div><div class="course-body"><h3>${c.courseName}</h3><p>${c.description||""}</p><span class="badge ${Number(c.price)>0?"paid":""}">${Number(c.price)>0?"PAID R"+c.price:"FREE"}</span><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><button onclick="openCourse('${c.courseId}')">Open Course</button></div></div>`).join("");
+  el.innerHTML=courses.map(c=>{
+    const courseId=getCourseId(c);
+    const name=getCourseName(c);
+    const description=c.description||c.DESCRIPTION||"";
+    const price=Number(c.price||c.PRICE||0);
+    return `<div class="card course-card"><div class="course-thumb">${thumbnailHtml(c)}</div><div class="course-body"><h3>${name}</h3><p>${description}</p><span class="badge ${price>0?"paid":""}">${price>0?"PAID R"+price:"FREE"}</span><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><button onclick="openCourse('${courseId}',this)">Start Now</button></div></div>`;
+  }).join("");
 }
-async function openCourse(courseId){
+async function openCourse(courseId,btn){
+  beginSync(btn,"Synchronising");
   showTab("coursesView",document.querySelectorAll(".tab")[1]);
+  const lessonArea=document.getElementById("lessonArea");
+  if(lessonArea)lessonArea.innerHTML='<div class="card"><h2>Synchronising course...</h2><p class="muted">Loading lessons and quiz.</p></div>';
   let lessonsData, quizData;
   try{lessonsData=await api("getLessons",{courseId});}catch(e){lessonsData={lessons:[]};}
   try{quizData=await api("getQuiz",{courseId});}catch(e){quizData={quiz:[]};}
   const lessons=lessonsData.lessons||[];
   const quiz=quizData.quiz||[];
-  document.getElementById("lessonArea").innerHTML=`<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons yet.</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
+  if(lessonArea)lessonArea.innerHTML=`<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons yet.</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
+  endSync(btn);
 }
 function lessonHtml(l){
   if(String(l.lessonType).toUpperCase()==="VIDEO"){
@@ -292,15 +351,15 @@ function youtubeEmbed(url){if(!url)return ""; if(url.includes("watch?v="))return
 async function markLesson(courseId,lessonId){await api("saveProgress",{userId:currentUser.userId,courseId,lessonId,status:"COMPLETED",score:0});alert("Lesson marked complete.");loadProgress();}
 function answerQuiz(id,selected,answer){alert(selected===answer?"Correct answer!":"Incorrect answer. Correct answer is "+answer);}
 function loadProgress(){document.getElementById("statLessons").textContent="0";document.getElementById("statScore").textContent="0%";document.getElementById("statAttendance").textContent="0%";document.getElementById("overallProgress").style.width="0%";document.getElementById("overallProgressText").textContent="0%";}
-async function createCourse(){const data=await api("createCourse",{courseName:val("newCourseName"),description:val("newCourseDescription"),category:val("newCourseCategory"),price:val("newCoursePrice"),thumbnail:val("newCourseThumbnail")});showMsg("courseMessage",data.message||"Course saved.");loadCourses();}
-async function createLesson(){const data=await api("createLesson",{courseId:val("lessonCourseId"),title:val("lessonTitle"),lessonType:val("lessonType"),content:val("lessonContent"),videoLink:val("lessonVideo")});showMsg("lessonMessage",data.message||"Lesson saved.");}
-async function createAssignment(){await api("createAssignment",{courseId:val("assignmentCourseId"),title:val("assignmentTitle"),instructions:val("assignmentInstructions")});alert("Assignment created.");}
-async function loadUsers(){const data=await api("getUsers");const users=data.users||[];document.getElementById("usersBody").innerHTML=users.length?users.map(u=>`<tr><td>${u.fullName}</td><td>${u.username}</td><td>${u.email}</td><td>${u.role}</td><td>${u.status}</td></tr>`).join(""):`<tr><td colspan="5">No users found.</td></tr>`;}
-async function createUser(){await api("createUser",{fullName:val("userFullName"),username:val("userUsername"),email:val("userEmail"),password:val("userPassword"),role:val("userRole")});alert("User created.");}
-async function saveWhatsAppNotification(){await api("saveWhatsAppNotification",{phone:val("waPhone"),message:val("waMessage")});alert("WhatsApp notification logged.");}
-async function recordPayment(){await api("recordPayment",{userId:currentUser.userId,courseId:val("payCourseId"),amount:val("payAmount"),method:val("payMethod")});alert("Payment recorded.");}
-async function createLiveClass(){await api("createLiveClass",{title:val("liveTitle"),courseId:val("liveCourseId"),zoomLink:val("liveZoom"),dateTime:val("liveDate")});alert("Live class saved.");}
-async function saveAttendance(){await api("saveAttendance",{userId:currentUser.userId,courseId:val("attCourseId"),status:val("attStatus")});alert("Attendance saved.");}
+async function createCourse(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{const data=await api("createCourse",{courseName:val("newCourseName"),description:val("newCourseDescription"),category:val("newCourseCategory"),price:val("newCoursePrice"),thumbnail:val("newCourseThumbnail")});showMsg("courseMessage",data.message||"Course saved.");loadCourses();}finally{endSync(btn);}}
+async function createLesson(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{const data=await api("createLesson",{courseId:val("lessonCourseId"),title:val("lessonTitle"),lessonType:val("lessonType"),content:val("lessonContent"),videoLink:val("lessonVideo")});showMsg("lessonMessage",data.message||"Lesson saved.");}finally{endSync(btn);}}
+async function createAssignment(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createAssignment",{courseId:val("assignmentCourseId"),title:val("assignmentTitle"),instructions:val("assignmentInstructions")});alert("Assignment created.");}finally{endSync(btn);}}
+async function loadUsers(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{const data=await api("getUsers");const users=data.users||[];document.getElementById("usersBody").innerHTML=users.length?users.map(u=>`<tr><td>${u.fullName}</td><td>${u.username}</td><td>${u.email}</td><td>${u.role}</td><td>${u.status}</td></tr>`).join(""):`<tr><td colspan="5">No users found.</td></tr>`;}finally{endSync(btn);}}
+async function createUser(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createUser",{fullName:val("userFullName"),username:val("userUsername"),email:val("userEmail"),password:val("userPassword"),role:val("userRole")});alert("User created.");}finally{endSync(btn);}}
+async function saveWhatsAppNotification(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("saveWhatsAppNotification",{phone:val("waPhone"),message:val("waMessage")});alert("WhatsApp notification logged.");}finally{endSync(btn);}}
+async function recordPayment(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("recordPayment",{userId:currentUser.userId,courseId:val("payCourseId"),amount:val("payAmount"),method:val("payMethod")});alert("Payment recorded.");}finally{endSync(btn);}}
+async function createLiveClass(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createLiveClass",{title:val("liveTitle"),courseId:val("liveCourseId"),zoomLink:val("liveZoom"),dateTime:val("liveDate")});alert("Live class saved.");}finally{endSync(btn);}}
+async function saveAttendance(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("saveAttendance",{userId:currentUser.userId,courseId:val("attCourseId"),status:val("attStatus")});alert("Attendance saved.");}finally{endSync(btn);}}
 function val(id){return document.getElementById(id).value;}
 window.addEventListener("load",()=>{const saved=localStorage.getItem("op_school_user");if(saved){currentUser=JSON.parse(saved);showApp();loadDashboard();}});
 </script>
