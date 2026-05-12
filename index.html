@@ -240,13 +240,22 @@
   </section>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzq4TDlpHHCA1JHLWpwGOZjejlubgzkvVx1eXFn9w4SOqaeLDIOf9RGK6x6QhdHN8um0g/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzxdZHwIysbvz6AWhAbETBXemujgQ0Pz8wjEMshdkfqz5QzmCKyRsTll2GKVooPDuyy7A/exec";
 let currentUser = null;
 let latestCourses = [];
 
 function api(action, params={}){
+  if(!isScriptUrlReady()){
+    return Promise.reject(new Error("SCRIPT_URL is not set. Paste your deployed Apps Script Web App /exec URL."));
+  }
   const q = new URLSearchParams({action, ...params, _ts: Date.now()});
-  return fetch(SCRIPT_URL + "?" + q.toString()).then(r => r.json());
+  return fetch(SCRIPT_URL + "?" + q.toString()).then(r => {
+    if(!r.ok) throw new Error("Apps Script returned HTTP " + r.status);
+    return r.json();
+  }).then(data => {
+    if(data && data.success === false) throw new Error(data.message || "Apps Script returned an error");
+    return data;
+  });
 }
 function showMsg(id,text,type="success"){const el=document.getElementById(id); if(!el)return; el.textContent=text; el.className="message "+type;}
 function showTab(id,btn){
@@ -301,6 +310,10 @@ function extractYouTubeId(url){
   if(m)return m[1];
   m=url.match(/youtube\.com\/shorts\/([^?&/]+)/);
   if(m)return m[1];
+  m=url.match(/youtube\.com\/live\/([^?&/]+)/);
+  if(m)return m[1];
+  m=url.match(/[?&]vi=([^&]+)/);
+  if(m)return m[1];
   return "";
 }
 function thumbnailHtml(c){
@@ -313,7 +326,7 @@ function isScriptUrlReady(){
 }
 const courseVideoCache = {};
 function firstVideoLesson(lessons){
-  return (lessons||[]).map(normaliseLesson).find(l=>extractYouTubeId(l.videoLink));
+  return (lessons||[]).map(normaliseLesson).find(l=>extractYouTubeId(l.videoLink||l.rawVideoLink||l.youtubeLink||l.link));
 }
 function courseThumbWithPlay(url,name){
   if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span>`;
@@ -402,7 +415,7 @@ async function openCourse(courseId,btn){
   const firstVideo=courseVideoCache[courseId]||firstVideoLesson(lessons);
   if(firstVideo)courseVideoCache[courseId]=firstVideo;
   const player=firstVideo?`<div class="card lesson"><h2>${firstVideo.title}</h2><p>${firstVideo.content||""}</p><div class="lesson-video"><iframe src="${youtubeEmbed(firstVideo.videoLink)}?autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>`:"";
-  if(lessonArea)lessonArea.innerHTML=`${player}<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons found for this course yet. Check that LESSONS COURSE_ID matches this course: "+courseId+"</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
+  if(lessonArea)lessonArea.innerHTML=`${player}<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons found for this course yet. Check that LESSONS COURSE_ID matches this course: "+courseId+(lessonsData.message?"<br><br>Error: "+lessonsData.message:"")+"</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
   endSync(btn);
 }
 function normaliseLesson(l){
@@ -412,7 +425,7 @@ function normaliseLesson(l){
     title:l.title||l.lessonTitle||l.LESSON_TITLE||"Untitled Lesson",
     lessonType:l.lessonType||l.LESSON_TYPE||"TEXT",
     content:l.content||l.CONTENT||"",
-    videoLink:l.videoLink||l.VIDEO_LINK||""
+    videoLink:l.videoLink||l.VIDEO_LINK||l.youtubeLink||l.YOUTUBE_LINK||l.link||l.LINK||l.url||l.URL||l.rawVideoLink||""
   };
 }
 function normaliseQuiz(q){
