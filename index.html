@@ -245,7 +245,7 @@
   </section>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7RDLDUIV7UZ1rpVmZYfSmwmiXWBj_skbbdMR20OCgojX-Z-tnVHxn1OO9_ozhonN-9w/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx29NTMTX_m5BSQ5ZeGypsLTIO-6lhCW4fYOXd7gubVpSOCYRjdeleu-uqEQhCifrNg/exec";
 let currentUser = null;
 let latestCourses = [];
 
@@ -253,13 +253,44 @@ function api(action, params={}){
   if(!isScriptUrlReady()){
     return Promise.reject(new Error("SCRIPT_URL is not set. Paste your deployed Apps Script Web App /exec URL into the HTML."));
   }
-  const q = new URLSearchParams({action, ...params, _ts: Date.now()});
-  return fetch(SCRIPT_URL + "?" + q.toString()).then(r => {
-    if(!r.ok) throw new Error("Apps Script returned HTTP " + r.status);
-    return r.json();
-  }).then(data => {
-    if(data && data.success === false) throw new Error(data.message || "Apps Script returned an error");
-    return data;
+
+  return new Promise((resolve,reject)=>{
+    const callbackName = "jsonp_" + Date.now() + "_" + Math.floor(Math.random()*100000);
+    const q = new URLSearchParams({action, callback:callbackName, ...params, _ts:Date.now()});
+    const script = document.createElement("script");
+
+    window[callbackName] = function(data){
+      try{
+        delete window[callbackName];
+        script.remove();
+      }catch(e){}
+      if(data && data.success === false){
+        reject(new Error(data.message || "Apps Script returned an error"));
+      }else{
+        resolve(data);
+      }
+    };
+
+    script.onerror = function(){
+      try{
+        delete window[callbackName];
+        script.remove();
+      }catch(e){}
+      reject(new Error("Could not connect to Apps Script. Check deployment access is set to Anyone and use the /exec URL."));
+    };
+
+    script.src = SCRIPT_URL + "?" + q.toString();
+    document.body.appendChild(script);
+
+    setTimeout(()=>{
+      if(window[callbackName]){
+        try{
+          delete window[callbackName];
+          script.remove();
+        }catch(e){}
+        reject(new Error("Apps Script connection timed out. Re-deploy as Web App and use the latest /exec URL."));
+      }
+    },30000);
   });
 }
 function showMsg(id,text,type="success"){const el=document.getElementById(id); if(!el)return; el.textContent=text; el.className="message "+type;}
