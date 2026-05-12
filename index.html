@@ -60,6 +60,9 @@
     .progress-fill{height:100%;background:var(--success);width:0}
     .lesson{border-left:6px solid var(--accent);margin-bottom:12px}
     iframe{width:100%;height:360px;border:0;border-radius:16px;background:#111827}
+    .lesson-thumb{height:260px;border-radius:16px;background:#dbeafe;display:grid;place-items:center;overflow:hidden;color:#1d4ed8;font-weight:900;margin:12px 0;position:relative;cursor:pointer}
+    .lesson-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+    .lesson-play{position:absolute;display:grid;place-items:center;width:72px;height:72px;border-radius:999px;background:rgba(15,23,42,.82);color:white;font-size:26px;box-shadow:0 10px 25px rgba(0,0,0,.25)}
     .quiz-option{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin:8px 0;cursor:pointer}
     .quiz-option:hover{border-color:var(--accent)}
     .table-wrap{overflow:auto}
@@ -414,9 +417,20 @@ function normaliseQuiz(q){
 }
 function lessonHtml(l){
   if(String(l.lessonType).toUpperCase()==="VIDEO"){
-    return `<div class="card lesson"><h3>${l.title}</h3><p>${l.content||""}</p><div class="lesson-video"><iframe src="${youtubeEmbed(l.videoLink)}" allowfullscreen></iframe></div><button class="success" onclick="markLesson('${l.courseId}','${l.lessonId}')">Mark Complete</button></div>`;
+    const youtubeId=extractYouTubeId(l.videoLink);
+    const thumb=youtubeId ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` : "";
+    const playerId="player_"+String(l.lessonId||Math.random()).replace(/[^a-zA-Z0-9_]/g,"_");
+    const thumbHtml=thumb ? `<img src="${thumb}" alt="${l.title}" onerror="this.parentNode.innerHTML='VIDEO LESSON'"><span class="lesson-play">▶</span>` : `<span>VIDEO LESSON</span><span class="lesson-play">▶</span>`;
+    return `<div class="card lesson"><h3>${l.title}</h3><p>${l.content||""}</p><div id="${playerId}" class="lesson-thumb" onclick="startLessonVideo('${playerId}','${youtubeEmbed(l.videoLink)}')">${thumbHtml}</div><button onclick="startLessonVideo('${playerId}','${youtubeEmbed(l.videoLink)}')">Start Lesson</button> <button class="success" onclick="markLesson('${l.courseId}','${l.lessonId}')">Mark Complete</button></div>`;
   }
   return `<div class="card lesson"><h3>${l.title}</h3><p>${l.content||""}</p><button class="success" onclick="markLesson('${l.courseId}','${l.lessonId}')">Mark Complete</button></div>`;
+}
+function startLessonVideo(playerId,embedUrl){
+  const box=document.getElementById(playerId);
+  if(!box)return;
+  if(!embedUrl){box.innerHTML='<p class="muted">No video link found in LESSONS sheet VIDEO_LINK column.</p>';return;}
+  box.className="lesson-video";
+  box.innerHTML=`<iframe src="${embedUrl}?autoplay=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
 }
 function quizHtml(q){return `<div class="lesson"><h3>${q.question}</h3><div class="quiz-option" onclick="answerQuiz('${q.quizId}','A','${q.answer}')">A. ${q.optionA}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','B','${q.answer}')">B. ${q.optionB}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','C','${q.answer}')">C. ${q.optionC}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','D','${q.answer}')">D. ${q.optionD}</div></div>`;}
 function youtubeEmbed(url){
