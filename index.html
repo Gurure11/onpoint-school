@@ -85,6 +85,12 @@
     .student-row{display:grid;grid-template-columns:1.3fr 1fr auto;gap:12px;align-items:center;border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;background:#fff}
     .role-note{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:14px;padding:12px;color:#475569;margin-bottom:14px}
     .link-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;word-break:break-all;color:#1d4ed8;font-weight:700;margin-bottom:12px}
+    .link-box a{color:#1d4ed8;font-weight:900}
+    .video-method-note{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:12px;padding:10px;margin:8px 0 12px;font-size:13px}
+    .lesson-video video{width:100%;max-height:520px;border-radius:16px;background:#111827;display:block}  
+    .upload-status{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:12px;margin-bottom:12px;color:#475569}
+    .lesson-meta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+    .lesson-meta span{background:#eef2ff;color:#3730a3;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900}
     @media(max-width:900px){.login-page{grid-template-columns:1fr}.hero{padding:34px}.hero h1{font-size:34px}.feature-grid,.stats{grid-template-columns:1fr}.main{padding:18px}iframe{height:240px}}
   </style>
 </head>
@@ -179,7 +185,11 @@
             <label>Lesson Title</label><input id="lessonTitle">
             <label>Lesson Type</label><select id="lessonType"><option>TEXT</option><option>VIDEO</option></select>
             <label>Text Content</label><textarea id="lessonContent"></textarea>
-            <label>Video Link / YouTube Link</label><input id="lessonVideo" placeholder="Paste YouTube link or video URL">
+            <div class="video-method-note"><strong>Video method 1:</strong> paste a YouTube, Google Drive, or direct MP4/WebM link below. <br><strong>Video method 2:</strong> upload a video file; it will be saved to Google Drive and the Drive link will be placed here automatically.</div>
+            <label>Method 1: Video Link / YouTube / Google Drive Link</label><input id="lessonVideo" placeholder="Paste YouTube, Google Drive, MP4, or WebM link">
+            <label>Method 2: Upload Video File to Google Drive</label><input id="lessonVideoFile" type="file" accept="video/*">
+            <button class="secondary" onclick="uploadLessonVideoToDrive()">Upload Video to Drive & Use Link</button>
+            <div id="lessonUploadStatus" class="upload-status hidden"></div>
             <div id="lessonVideoLinkPreview" class="link-box hidden"></div>
             <button onclick="createLesson()">Save Lesson</button>
             <div id="lessonMessage" class="message"></div>
@@ -264,7 +274,7 @@
   </section>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDXPP3ljqi904JLIR8wwugLXEnvRN-M753BDvxcuec7t2kYtVyBgYEilkjXag3weUUXQ/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyc0NIEOMYkuUo8-OqGJ4BZWkM2-9BWjYOy500vO03SwEA5OPOkt1XTHyoa03vuX4Lo/exec";
 let currentUser = null;
 let latestCourses = [];
 
@@ -528,31 +538,66 @@ function normaliseQuiz(q){
   };
 }
 function lessonHtml(l){
-  const type = String(l.lessonType || "").toUpperCase();
+  const courseId = l.courseId || "";
+  const title = l.title || "Untitled Lesson";
   const videoUrl = l.videoLink || "";
   const youtubeId = extractYouTubeId(videoUrl);
+  const isVideo = String(l.lessonType || "").toUpperCase() === "VIDEO" || !!videoUrl;
 
-  if(type === "VIDEO" || youtubeId){
+  if(isVideo){
     const thumb = youtubeId ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` : "";
-    const embed = youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : videoUrl;
+    const embed = youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : normaliseDriveVideoUrl(videoUrl);
     const playerId = "player_" + String(l.lessonId || Math.random()).replace(/[^a-zA-Z0-9_]/g,"_");
     const thumbHtml = thumb
-      ? `<img src="${thumb}" alt="${l.title}" loading="lazy" onerror="this.parentNode.innerHTML='VIDEO LESSON'"><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>`
+      ? `<img src="${thumb}" alt="${title}" loading="lazy" onerror="this.parentNode.innerHTML='VIDEO LESSON'"><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>`
       : `<span>VIDEO LESSON</span><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>`;
 
     return `<div class="card lesson">
-      <h3>${l.title}</h3>
+      <h3>${title}</h3>
+      <div class="lesson-meta"><span>Course ID: ${courseId}</span><span>Lesson Title: ${title}</span></div>
       <p>${l.content || ""}</p>
-      <div id="${playerId}" class="video-card-thumb" onclick="startLessonVideo('${playerId}','${embed}')">${thumbHtml}</div>
-      <button onclick="startLessonVideo('${playerId}','${embed}')">Start Lesson</button>
-      <button class="success" onclick="markLesson('${l.courseId}','${l.lessonId}')">Mark Complete</button>
+      <div class="link-box">${videoUrl ? `<a href="${escapeHtml(videoUrl)}" target="_blank" rel="noopener">Open video link</a><br>${escapeHtml(videoUrl)}` : "No VIDEO_LINK found"}</div>
+      <div id="${playerId}" class="video-card-thumb" onclick="startLessonVideo('${playerId}','${escapeAttr(embed)}','${escapeAttr(videoUrl)}')">${thumbHtml}</div>
+      <button onclick="startLessonVideo('${playerId}','${escapeAttr(embed)}','${escapeAttr(videoUrl)}')">Start Lesson</button>
+      <button class="success" onclick="markLesson('${courseId}','${l.lessonId}')">Mark Complete</button>
     </div>`;
   }
 
-  return `<div class="card lesson"><h3>${l.title}</h3><p>${l.content||""}</p><button class="success" onclick="markLesson('${l.courseId}','${l.lessonId}')">Mark Complete</button></div>`;
+  return `<div class="card lesson">
+    <h3>${title}</h3>
+    <div class="lesson-meta"><span>Course ID: ${courseId}</span><span>Lesson Title: ${title}</span></div>
+    <p>${l.content||""}</p>
+    <button class="success" onclick="markLesson('${courseId}','${l.lessonId}')">Mark Complete</button>
+  </div>`;
 }
 
-function startLessonVideo(playerId,embedUrl){
+function normaliseDriveVideoUrl(url){
+  url=String(url||"").trim();
+  if(!url)return "";
+  const driveMatch=url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if(driveMatch)return "https://drive.google.com/file/d/"+driveMatch[1]+"/preview";
+  const openMatch=url.match(/[?&]id=([^&]+)/);
+  if(url.includes("drive.google.com")&&openMatch)return "https://drive.google.com/file/d/"+openMatch[1]+"/preview";
+  return url;
+}
+function escapeHtml(text){
+  return String(text||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+}
+function escapeAttr(text){
+  return String(text||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/[\r\n]/g," ");
+}
+function isDirectVideoFile(url){
+  return /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(String(url||""));
+}
+function makeVideoPlayerHtml(embedUrl,originalUrl){
+  if(isDirectVideoFile(originalUrl) || isDirectVideoFile(embedUrl)){
+    return `<video controls playsinline src="${escapeHtml(originalUrl||embedUrl)}"></video>`;
+  }
+  const joiner = embedUrl.includes("?") ? "&" : "?";
+  return `<iframe src="${escapeHtml(embedUrl)}${joiner}autoplay=1&rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+}
+
+function startLessonVideo(playerId,embedUrl,originalUrl){
   const box=document.getElementById(playerId);
   if(!box)return;
   if(!embedUrl){
@@ -560,7 +605,7 @@ function startLessonVideo(playerId,embedUrl){
     return;
   }
   box.className="lesson-video";
-  box.innerHTML=`<iframe src="${embedUrl}${embedUrl.includes('?') ? '&' : '?'}autoplay=1&rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+  box.innerHTML=makeVideoPlayerHtml(embedUrl,originalUrl||embedUrl);
 }
 function quizHtml(q){return `<div class="lesson"><h3>${q.question}</h3><div class="quiz-option" onclick="answerQuiz('${q.quizId}','A','${q.answer}')">A. ${q.optionA}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','B','${q.answer}')">B. ${q.optionB}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','C','${q.answer}')">C. ${q.optionC}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','D','${q.answer}')">D. ${q.optionD}</div></div>`;}
 function youtubeEmbed(url){
@@ -636,6 +681,43 @@ async function openAdminStudent(userId,btn){
     const box=document.getElementById("adminStudentDetail");
     const courses=data.courses||[];
     box.innerHTML=`<div class="card"><h2>${data.studentName||"Student"} Studies</h2>${courses.length?courses.map(c=>`<div class="lesson"><h3>${c.courseName}</h3><p class="muted">Status: ${c.status}</p><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><strong>${c.progress||0}%</strong></div>`).join(""):"<p class='muted'>No studies found.</p>"}</div>`;
+  }finally{endSync(btn);}
+}
+
+
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result).split(",")[1]);
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+async function uploadLessonVideoToDrive(){
+  const btn=buttonFromEvent();
+  beginSync(btn,"Uploading");
+  const status=document.getElementById("lessonUploadStatus");
+  try{
+    if(!canUploadLessons()){alert("Only Admin and Teachers can upload videos.");return;}
+    const file=document.getElementById("lessonVideoFile").files[0];
+    if(!file){alert("Please select a video file first.");return;}
+    if(status){status.textContent="Uploading video to Google Drive...";status.classList.remove("hidden");}
+    const base64=await fileToBase64(file);
+    const data=await api("uploadVideoToDrive",{
+      fileName:file.name,
+      mimeType:file.type || "video/mp4",
+      base64:base64,
+      courseId:val("lessonCourseId"),
+      title:val("lessonTitle"),
+      uploadedBy:currentUser.userId
+    });
+    const driveLink=data.previewUrl||data.fileUrl||"";
+    document.getElementById("lessonVideo").value=driveLink;
+    const preview=document.getElementById("lessonVideoLinkPreview");
+    if(preview){preview.innerHTML=`Google Drive video link:<br><a href="${escapeHtml(driveLink)}" target="_blank" rel="noopener">Open uploaded video</a><br>${escapeHtml(driveLink)}`;preview.classList.remove("hidden");}
+    if(status){status.textContent="Upload complete. The Google Drive link has been added to the video link field and will play in the lesson video view.";}
+  }catch(e){
+    if(status){status.textContent="Upload failed: "+e.message;status.classList.remove("hidden");}
   }finally{endSync(btn);}
 }
 
