@@ -274,7 +274,7 @@
   </section>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyc0NIEOMYkuUo8-OqGJ4BZWkM2-9BWjYOy500vO03SwEA5OPOkt1XTHyoa03vuX4Lo/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKcGpa4IqKxgp6JgUgu56_NK3g5PA1SoqYChcZQvxSt_A7mo1dBLAoMK94CSyOAQ-a/exec";
 let currentUser = null;
 let latestCourses = [];
 
@@ -523,7 +523,9 @@ function normaliseLesson(l){
     title:l.title||l.lessonTitle||l.LESSON_TITLE||"Untitled Lesson",
     lessonType:l.lessonType||l.LESSON_TYPE||"TEXT",
     content:l.content||l.CONTENT||"",
-    videoLink:l.videoLink||l.VIDEO_LINK||l.youtubeLink||l.YOUTUBE_LINK||l.link||l.LINK||l.url||l.URL||l.rawVideoLink||""
+    videoLink:l.videoLink||l.VIDEO_LINK||l.youtubeLink||l.YOUTUBE_LINK||l.link||l.LINK||l.url||l.URL||l.rawVideoLink||"",
+    previewUrl:l.previewUrl||l.PREVIEW_URL||l.playableVideoLink||l.PLAYABLE_VIDEO_LINK||"",
+    downloadUrl:l.downloadUrl||l.DOWNLOAD_URL||""
   };
 }
 function normaliseQuiz(q){
@@ -541,12 +543,13 @@ function lessonHtml(l){
   const courseId = l.courseId || "";
   const title = l.title || "Untitled Lesson";
   const videoUrl = l.videoLink || "";
-  const youtubeId = extractYouTubeId(videoUrl);
-  const isVideo = String(l.lessonType || "").toUpperCase() === "VIDEO" || !!videoUrl;
+  const playableUrl = l.previewUrl || l.playableVideoLink || normaliseDriveVideoUrl(videoUrl);
+  const youtubeId = extractYouTubeId(videoUrl || playableUrl);
+  const isVideo = String(l.lessonType || "").toUpperCase() === "VIDEO" || !!videoUrl || !!playableUrl;
 
   if(isVideo){
     const thumb = youtubeId ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` : "";
-    const embed = youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : normaliseDriveVideoUrl(videoUrl);
+    const embed = youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : playableUrl;
     const playerId = "player_" + String(l.lessonId || Math.random()).replace(/[^a-zA-Z0-9_]/g,"_");
     const thumbHtml = thumb
       ? `<img src="${thumb}" alt="${title}" loading="lazy" onerror="this.parentNode.innerHTML='VIDEO LESSON'"><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>`
@@ -556,9 +559,10 @@ function lessonHtml(l){
       <h3>${title}</h3>
       <div class="lesson-meta"><span>Course ID: ${courseId}</span><span>Lesson Title: ${title}</span></div>
       <p>${l.content || ""}</p>
-      <div class="link-box">${videoUrl ? `<a href="${escapeHtml(videoUrl)}" target="_blank" rel="noopener">Open video link</a><br>${escapeHtml(videoUrl)}` : "No VIDEO_LINK found"}</div>
+      <div class="link-box">${videoUrl ? `<a href="${escapeHtml(playableUrl || videoUrl)}" target="_blank" rel="noopener">Open video in new tab</a><br>${escapeHtml(videoUrl)}` : "No VIDEO_LINK found"}</div>
       <div id="${playerId}" class="video-card-thumb" onclick="startLessonVideo('${playerId}','${escapeAttr(embed)}','${escapeAttr(videoUrl)}')">${thumbHtml}</div>
       <button onclick="startLessonVideo('${playerId}','${escapeAttr(embed)}','${escapeAttr(videoUrl)}')">Start Lesson</button>
+      ${playableUrl ? `<button class="secondary" onclick="window.open('${escapeAttr(playableUrl)}','_blank')">Open Video</button>` : ""}
       <button class="success" onclick="markLesson('${courseId}','${l.lessonId}')">Mark Complete</button>
     </div>`;
   }
@@ -590,11 +594,16 @@ function isDirectVideoFile(url){
   return /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(String(url||""));
 }
 function makeVideoPlayerHtml(embedUrl,originalUrl){
+  const safeEmbed=escapeHtml(embedUrl||"");
+  const safeOriginal=escapeHtml(originalUrl||embedUrl||"");
   if(isDirectVideoFile(originalUrl) || isDirectVideoFile(embedUrl)){
-    return `<video controls playsinline src="${escapeHtml(originalUrl||embedUrl)}"></video>`;
+    return `<video controls playsinline preload="metadata" src="${safeOriginal}"></video><p class="muted"><a href="${safeOriginal}" target="_blank" rel="noopener">Open video in new tab</a></p>`;
+  }
+  if(String(embedUrl||"").includes("drive.google.com")){
+    return `<iframe src="${safeEmbed}" allow="autoplay; fullscreen" allowfullscreen></iframe><p class="muted">If the video does not show, click <a href="${safeEmbed}" target="_blank" rel="noopener">Open video in new tab</a>. Make sure the Drive file sharing is set to Anyone with the link can view.</p>`;
   }
   const joiner = embedUrl.includes("?") ? "&" : "?";
-  return `<iframe src="${escapeHtml(embedUrl)}${joiner}autoplay=1&rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+  return `<iframe src="${safeEmbed}${joiner}autoplay=1&rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe><p class="muted"><a href="${safeOriginal}" target="_blank" rel="noopener">Open video in new tab</a></p>`;
 }
 
 function startLessonVideo(playerId,embedUrl,originalUrl){
