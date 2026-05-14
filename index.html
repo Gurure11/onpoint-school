@@ -274,7 +274,7 @@
   </section>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyi9K_US5DnTe5td9syXBZWwrLWroTojnepjKbF0osDmu7U5lBO2lwOmG08okNeQA4h/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyEKEQRiWof8qQZJCfasSsJlTVXhqBDE22GroZbhH9pJZrElIG6KYkNFpCxkz2W-qeP/exec";
 let currentUser = null;
 let latestCourses = [];
 
@@ -391,11 +391,14 @@ function isScriptUrlReady(){
 }
 const courseVideoCache = {};
 function firstVideoLesson(lessons){
-  return (lessons||[]).map(normaliseLesson).find(l=>extractYouTubeId(l.videoLink||l.rawVideoLink||l.youtubeLink||l.link));
+  return (lessons||[]).map(normaliseLesson).find(l=>{
+    const url = l.videoLink || l.previewUrl || l.playableVideoLink || l.rawVideoLink || l.youtubeLink || l.link || l.url;
+    return !!String(url || '').trim();
+  });
 }
 function courseThumbWithPlay(url,name){
-  if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span>`;
-  return `<img src="${url}" alt="${name}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+  if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+  return `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
 }
 
 async function login(){
@@ -477,10 +480,17 @@ async function hydrateYouTubeThumbnails(target,courses){
       const lesson=firstVideoLesson(data.lessons||[]);
       if(lesson){
         courseVideoCache[courseId]=lesson;
-        const id=extractYouTubeId(lesson.videoLink);
-        if(id)thumb.innerHTML=`<img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" alt="${getCourseName(c)}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+        const videoUrl = lesson.videoLink || lesson.previewUrl || lesson.playableVideoLink || '';
+        const id=extractYouTubeId(videoUrl);
+        if(id){
+          thumb.innerHTML=`<img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" alt="${escapeHtml(getCourseName(c))}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+        }else{
+          thumb.innerHTML=`<span data-thumb-placeholder="1">VIDEO LESSON</span><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+        }
       }
-    }catch(e){}
+    }catch(e){
+      console.warn('Could not fetch lesson thumbnails for course', courseId, e);
+    }
   }));
 }
 async function openCourse(courseId,btn){
@@ -507,7 +517,7 @@ async function openCourse(courseId,btn){
     return;
   }
   let lessonsData, quizData;
-  try{lessonsData=await api("getLessons",{courseId});}catch(e){lessonsData={lessons:[],message:e.message};}
+  try{lessonsData=await api("getLessons",{courseId}); console.log('getLessons response', lessonsData);}catch(e){lessonsData={lessons:[],message:e.message}; console.error('getLessons failed', e);}
   try{quizData=await api("getQuiz",{courseId});}catch(e){quizData={quiz:[]};}
   const lessons=(lessonsData.lessons||[]).map(normaliseLesson);
   const quiz=(quizData.quiz||[]).map(normaliseQuiz);
@@ -523,7 +533,7 @@ function normaliseLesson(l){
     title:l.title||l.lessonTitle||l.LESSON_TITLE||"Untitled Lesson",
     lessonType:l.lessonType||l.LESSON_TYPE||"TEXT",
     content:l.content||l.CONTENT||"",
-    videoLink:l.videoLink||l.VIDEO_LINK||l.youtubeLink||l.YOUTUBE_LINK||l.link||l.LINK||l.url||l.URL||l.rawVideoLink||"",
+    videoLink:l.videoLink||l.VIDEO_LINK||l['VIDEO LINK']||l.youtubeLink||l.YOUTUBE_LINK||l['YOUTUBE LINK']||l.youtubeUrl||l.YOUTUBE_URL||l.link||l.LINK||l.url||l.URL||l.video||l.VIDEO||l.rawVideoLink||"",
     previewUrl:l.previewUrl||l.PREVIEW_URL||l.playableVideoLink||l.PLAYABLE_VIDEO_LINK||"",
     downloadUrl:l.downloadUrl||l.DOWNLOAD_URL||""
   };
@@ -578,9 +588,9 @@ function lessonHtml(l){
 function normaliseDriveVideoUrl(url){
   url=String(url||"").trim();
   if(!url)return "";
-  const driveMatch=url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  const driveMatch=url.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
   if(driveMatch)return "https://drive.google.com/file/d/"+driveMatch[1]+"/preview";
-  const openMatch=url.match(/[?&]id=([^&]+)/);
+  const openMatch=url.match(/[?&]id=([^&#]+)/);
   if(url.includes("drive.google.com")&&openMatch)return "https://drive.google.com/file/d/"+openMatch[1]+"/preview";
   return url;
 }
