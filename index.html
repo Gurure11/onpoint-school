@@ -209,7 +209,7 @@
           <div class="card">
             <h2>Admin Panel</h2>
             <button onclick="loadUsers()">Load Users</button>
-            <div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th></tr></thead><tbody id="usersBody"><tr><td colspan="5">No users loaded.</td></tr></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th></tr></thead><tbody id="usersBody"><tr><td colspan="5">No users loaded.</td></tr></tbody></div>
           </div>
           <div class="card">
             <h2>Add User</h2>
@@ -282,42 +282,25 @@ function api(action, params={}){
   if(!isScriptUrlReady()){
     return Promise.reject(new Error("SCRIPT_URL is not set. Paste your deployed Apps Script Web App /exec URL into the HTML."));
   }
-
   return new Promise((resolve,reject)=>{
     const callbackName = "jsonp_" + Date.now() + "_" + Math.floor(Math.random()*100000);
     const q = new URLSearchParams({action, callback:callbackName, ...params, _ts:Date.now()});
     const script = document.createElement("script");
-
     window[callbackName] = function(data){
-      try{
-        delete window[callbackName];
-        script.remove();
-      }catch(e){}
-      if(data && data.success === false){
-        reject(new Error(data.message || "Apps Script returned an error"));
-      }else{
-        resolve(data);
-      }
+      try{ delete window[callbackName]; script.remove(); }catch(e){}
+      if(data && data.success === false){ reject(new Error(data.message || "Apps Script returned an error")); }
+      else{ resolve(data); }
     };
-
     script.onerror = function(){
-      try{
-        delete window[callbackName];
-        script.remove();
-      }catch(e){}
-      reject(new Error("Could not connect to Apps Script. Check deployment access is set to Anyone and use the /exec URL."));
+      try{ delete window[callbackName]; script.remove(); }catch(e){}
+      reject(new Error("Could not connect to Apps Script."));
     };
-
     script.src = SCRIPT_URL + "?" + q.toString();
     document.body.appendChild(script);
-
     setTimeout(()=>{
       if(window[callbackName]){
-        try{
-          delete window[callbackName];
-          script.remove();
-        }catch(e){}
-        reject(new Error("Apps Script connection timed out. Re-deploy as Web App and use the latest /exec URL."));
+        try{ delete window[callbackName]; script.remove(); }catch(e){}
+        reject(new Error("Apps Script connection timed out."));
       }
     },30000);
   });
@@ -334,21 +317,8 @@ function showTab(id,btn){
   if(btn)btn.classList.add("active");
 }
 function logout(){localStorage.removeItem("op_school_user");location.reload();}
-function beginSync(btn,text){
-  if(!btn)return null;
-  const old=btn.textContent;
-  btn.dataset.oldText=old;
-  btn.textContent=text||"Synchronising";
-  btn.disabled=true;
-  btn.classList.add("syncing");
-  return old;
-}
-function endSync(btn){
-  if(!btn)return;
-  btn.textContent=btn.dataset.oldText||btn.textContent;
-  btn.disabled=false;
-  btn.classList.remove("syncing");
-}
+function beginSync(btn,text){ if(!btn)return null; const old=btn.textContent; btn.dataset.oldText=old; btn.textContent=text||"Synchronising"; btn.disabled=true; btn.classList.add("syncing"); return old; }
+function endSync(btn){ if(!btn)return; btn.textContent=btn.dataset.oldText||btn.textContent; btn.disabled=false; btn.classList.remove("syncing"); }
 function buttonFromEvent(){return (typeof event!=="undefined" && event && event.currentTarget) ? event.currentTarget : null;}
 function getCourseId(c){return c.courseId||c.id||c.COURSE_ID||c.course_id||"";}
 function getCourseName(c){return c.courseName||c.title||c.COURSE_NAME||c.course_name||"Untitled Course";}
@@ -375,31 +345,13 @@ function extractYouTubeId(url){
   if(m)return m[1];
   m=url.match(/youtube\.com\/shorts\/([^?&/]+)/);
   if(m)return m[1];
-  m=url.match(/youtube\.com\/live\/([^?&/]+)/);
-  if(m)return m[1];
-  m=url.match(/[?&]vi=([^&]+)/);
-  if(m)return m[1];
   return "";
 }
-function thumbnailHtml(c){
-  const url=normaliseThumbnailUrl(getCourseThumbnail(c));
-  if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span>`;
-  return `<img src="${url}" alt="${getCourseName(c)}" onerror="this.parentNode.innerHTML='ONPOINT'">`;
-}
-function isScriptUrlReady(){
-  return SCRIPT_URL && !SCRIPT_URL.includes("PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE");
-}
+function thumbnailHtml(c){ const url=normaliseThumbnailUrl(getCourseThumbnail(c)); if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span>`; return `<img src="${url}" alt="${getCourseName(c)}" onerror="this.parentNode.innerHTML='ONPOINT'">`; }
+function isScriptUrlReady(){ return SCRIPT_URL && !SCRIPT_URL.includes("PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE"); }
 const courseVideoCache = {};
-function firstVideoLesson(lessons){
-  return (lessons||[]).map(normaliseLesson).find(l=>{
-    const url = l.videoLink || l.previewUrl || l.playableVideoLink || l.rawVideoLink || l.youtubeLink || l.link || l.url;
-    return !!String(url || '').trim();
-  });
-}
-function courseThumbWithPlay(url,name){
-  if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
-  return `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
-}
+function firstVideoLesson(lessons){ return (lessons||[]).find(l=>{ const url = l.videoLink || l.previewUrl || l.playableVideoLink || l.rawVideoLink || l.link || l.url; return !!String(url || '').trim(); }); }
+function courseThumbWithPlay(url,name){ if(!url)return `<span data-thumb-placeholder="1">ONPOINT</span><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`; return `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`; }
 
 async function login(){
   const btn=buttonFromEvent();
@@ -411,7 +363,7 @@ async function login(){
     const data=await api("login",{username,password});
     if(data.success){currentUser=data.user;localStorage.setItem("op_school_user",JSON.stringify(currentUser));showApp();loadDashboard();}
     else showMsg("loginMessage",data.message||"Invalid login.","error");
-  }catch(e){showMsg("loginMessage","Could not connect to Apps Script. Paste your deployed Web App URL into SCRIPT_URL.","error");}
+  }catch(e){showMsg("loginMessage","Could not connect to Apps Script.","error");}
   finally{endSync(btn);}
 }
 function showApp(){
@@ -440,19 +392,14 @@ function applyRolePermissions(){
 async function loadDashboard(){await loadCourses();loadProgress();}
 async function loadCourses(){
   let data;
-  try{
-    if(userRole()==="STUDENT"){
-      data=await api("getStudentCourses",{userId:currentUser.userId});
-    }else{
-      data=await api("getCourses");
-    }
-  }catch(e){data={success:true,courses:demoCourses()};}
+  try{ if(userRole()==="STUDENT"){ data=await api("getStudentCourses",{userId:currentUser.userId}); }else{ data=await api("getCourses"); } }
+  catch(e){data={success:true,courses:demoCourses()};}
   latestCourses=data.courses||demoCourses();
   document.getElementById("statCourses").textContent=latestCourses.length;
   renderCourses("coursesList",latestCourses);
   renderCourses("coveredCourses",latestCourses.slice(0,4));
 }
-function demoCourses(){return[{courseId:"C001",courseName:"Safety Training",description:"Workplace safety and compliance.",category:"Safety",price:0,thumbnail:""},{courseId:"C002",courseName:"Leadership Basics",description:"Professional management training.",category:"Management",price:0,thumbnail:""}];}
+function demoCourses(){return[{courseId:"C001",courseName:"Safety Training",description:"Workplace safety.",category:"Safety",price:0,thumbnail:""},{courseId:"C002",courseName:"Leadership Basics",description:"Management training.",category:"Management",price:0,thumbnail:""}];}
 function renderCourses(target,courses){
   const el=document.getElementById(target); if(!el)return;
   el.innerHTML=courses.map(c=>{
@@ -467,124 +414,37 @@ function renderCourses(target,courses){
     const adminActions=isAdmin()?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="secondary" onclick="setCourseAccess('${courseId}','FREE',this)">Free</button><button class="secondary" onclick="setCourseAccess('${courseId}','PAID',this)">Paid</button></div>`:"";
     return `<div class="card course-card"><div class="course-thumb" id="thumb_${target}_${courseId}" onclick="${canStart?`openCourse('${courseId}',this)`:`requestEnrollment('${courseId}',this)`}">${courseThumbWithPlay(thumbUrl,name)}</div><div class="course-body"><h3>${name}</h3><p>${description}</p><span class="badge ${price>0?"paid":""}">${price>0?"PAID R"+price:"FREE"}</span>${status&&userRole()==="STUDENT"?` <span class="badge ${status==="APPROVED"?"":"paid"}">${status}</span>`:""}<div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div>${action}${adminActions}</div></div>`;
   }).join("");
-  hydrateYouTubeThumbnails(target,courses);
+  hydrateCourseThumbsWithVideo(target,courses);
 }
-async function hydrateYouTubeThumbnails(target,courses){
-  if(!isScriptUrlReady())return;
-  await Promise.all((courses||[]).map(async c=>{
+async function hydrateCourseThumbsWithVideo(target,courses){
+  for(const c of courses){
     const courseId=getCourseId(c);
-    const thumb=document.getElementById("thumb_"+target+"_"+courseId);
-    if(!thumb)return;
+    const thumbDiv=document.getElementById(`thumb_${target}_${courseId}`);
+    if(!thumbDiv)continue;
     try{
-      const data=await api("getLessons",{courseId});
-      const lesson=firstVideoLesson(data.lessons||[]);
-      if(lesson){
-        courseVideoCache[courseId]=lesson;
-        const videoUrl = lesson.videoLink || lesson.previewUrl || lesson.playableVideoLink || '';
-        const id=extractYouTubeId(videoUrl);
-        if(id){
-          thumb.innerHTML=`<img src="https://img.youtube.com/vi/${id}/hqdefault.jpg" alt="${escapeHtml(getCourseName(c))}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
-        }else{
-          thumb.innerHTML=`<span data-thumb-placeholder="1">VIDEO LESSON</span><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+      const lessonsData=await api("getLessons",{courseId});
+      const lesson=firstVideoLesson(lessonsData.lessons||[]);
+      if(lesson && lesson.videoLink){
+        const videoUrl=lesson.videoLink;
+        const ytId=extractYouTubeId(videoUrl);
+        if(ytId){
+          thumbDiv.innerHTML=`<img src="https://img.youtube.com/vi/${ytId}/hqdefault.jpg" alt="${getCourseName(c)}" loading="lazy" onerror="this.parentNode.innerHTML='ONPOINT'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+        } else {
+          const drivePreview=normaliseDriveVideoUrl(videoUrl);
+          if(drivePreview && drivePreview.includes("drive.google.com")){
+            thumbDiv.innerHTML=`<img src="https://drive.google.com/uc?export=view&id=${extractDriveId(videoUrl)}" alt="${getCourseName(c)}" onerror="this.parentNode.innerHTML='VIDEO'"><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+          } else {
+            thumbDiv.innerHTML=`<span data-thumb-placeholder="1">VIDEO LESSON</span><span class="course-play">▶</span><span class="course-start-label">Start Now</span>`;
+          }
         }
       }
-    }catch(e){
-      console.warn('Could not fetch lesson thumbnails for course', courseId, e);
-    }
-  }));
-}
-async function openCourse(courseId,btn){
-  beginSync(btn,"Synchronising");
-  if(userRole()==="STUDENT"){
-    const course=(latestCourses||[]).find(c=>String(getCourseId(c))===String(courseId));
-    if(course && String(course.enrollmentStatus||"").toUpperCase()!=="APPROVED"){
-      alert("This lesson needs Admin approval before you can start.");
-      endSync(btn);
-      return;
-    }
+    } catch(e){ console.warn(e); }
   }
-  showTab("coursesView",document.querySelectorAll(".tab")[1]);
-  const lessonArea=document.getElementById("lessonArea");
-  if(!courseId){
-    if(lessonArea)lessonArea.innerHTML='<div class="card"><h2>Course could not open</h2><p class="muted">This course has no COURSE_ID. Please check the COURSES sheet.</p></div>';
-    endSync(btn);
-    return;
-  }
-  if(lessonArea)lessonArea.innerHTML='<div class="card"><h2>Synchronising course...</h2><p class="muted">Loading lessons and quiz.</p></div>';
-  if(!isScriptUrlReady()){
-    if(lessonArea)lessonArea.innerHTML='<div class="card"><h2>Course connection not ready</h2><p class="muted">Paste your deployed Apps Script Web App URL into SCRIPT_URL before courses can load lessons and quizzes.</p></div>';
-    endSync(btn);
-    return;
-  }
-  let lessonsData, quizData;
-  try{lessonsData=await api("getLessons",{courseId}); console.log('getLessons response', lessonsData);}catch(e){lessonsData={lessons:[],message:e.message}; console.error('getLessons failed', e);}
-  try{quizData=await api("getQuiz",{courseId});}catch(e){quizData={quiz:[]};}
-  const lessons=(lessonsData.lessons||[]).map(normaliseLesson);
-  const quiz=(quizData.quiz||[]).map(normaliseQuiz);
-  const firstVideo=courseVideoCache[courseId]||firstVideoLesson(lessons);
-  if(firstVideo)courseVideoCache[courseId]=firstVideo;
-  if(lessonArea)lessonArea.innerHTML=`<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons found for this course yet. Check that LESSONS COURSE_ID matches this course: "+courseId+(lessonsData.message?"<br><br>Error: "+lessonsData.message:"")+"</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
-  endSync(btn);
 }
-function normaliseLesson(l){
-  return {
-    lessonId:l.lessonId||l.LESSON_ID||"",
-    courseId:l.courseId||l.COURSE_ID||"",
-    title:l.title||l.lessonTitle||l.LESSON_TITLE||"Untitled Lesson",
-    lessonType:l.lessonType||l.LESSON_TYPE||"TEXT",
-    content:l.content||l.CONTENT||"",
-    videoLink:l.videoLink||l.VIDEO_LINK||l['VIDEO LINK']||l.youtubeLink||l.YOUTUBE_LINK||l['YOUTUBE LINK']||l.youtubeUrl||l.YOUTUBE_URL||l.link||l.LINK||l.url||l.URL||l.video||l.VIDEO||l.rawVideoLink||"",
-    previewUrl:l.previewUrl||l.PREVIEW_URL||l.playableVideoLink||l.PLAYABLE_VIDEO_LINK||"",
-    downloadUrl:l.downloadUrl||l.DOWNLOAD_URL||""
-  };
+function extractDriveId(url){
+  const match=String(url||"").match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
+  return match ? match[1] : "";
 }
-function normaliseQuiz(q){
-  return {
-    quizId:q.quizId||q.QUIZ_ID||"",
-    question:q.question||q.QUESTION||"",
-    optionA:q.optionA||q.OPTION_A||"",
-    optionB:q.optionB||q.OPTION_B||"",
-    optionC:q.optionC||q.OPTION_C||"",
-    optionD:q.optionD||q.OPTION_D||"",
-    answer:q.answer||q.ANSWER||""
-  };
-}
-function lessonHtml(l){
-  const courseId = l.courseId || "";
-  const title = l.title || "Untitled Lesson";
-  const videoUrl = l.videoLink || "";
-  const playableUrl = l.previewUrl || l.playableVideoLink || normaliseDriveVideoUrl(videoUrl);
-  const youtubeId = extractYouTubeId(videoUrl || playableUrl);
-  const isVideo = String(l.lessonType || "").toUpperCase() === "VIDEO" || !!videoUrl || !!playableUrl;
-
-  if(isVideo){
-    const thumb = youtubeId ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` : "";
-    const embed = youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : playableUrl;
-    const playerId = "player_" + String(l.lessonId || Math.random()).replace(/[^a-zA-Z0-9_]/g,"_");
-    const thumbHtml = thumb
-      ? `<img src="${thumb}" alt="${title}" loading="lazy" onerror="this.parentNode.innerHTML='VIDEO LESSON'"><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>`
-      : `<span>VIDEO LESSON</span><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>`;
-
-    return `<div class="card lesson">
-      <h3>${title}</h3>
-      <div class="lesson-meta"><span>Course ID: ${courseId}</span><span>Lesson Title: ${title}</span></div>
-      <p>${l.content || ""}</p>
-      <div class="link-box">${videoUrl ? `<a href="${escapeHtml(playableUrl || videoUrl)}" target="_blank" rel="noopener">Open video in new tab</a><br>${escapeHtml(videoUrl)}` : "No VIDEO_LINK found"}</div>
-      <div id="${playerId}" class="video-card-thumb" onclick="startLessonVideo('${playerId}','${escapeAttr(embed)}','${escapeAttr(videoUrl)}')">${thumbHtml}</div>
-      <button onclick="startLessonVideo('${playerId}','${escapeAttr(embed)}','${escapeAttr(videoUrl)}')">Start Lesson</button>
-      ${playableUrl ? `<button class="secondary" onclick="window.open('${escapeAttr(playableUrl)}','_blank')">Open Video</button>` : ""}
-      <button class="success" onclick="markLesson('${courseId}','${l.lessonId}')">Mark Complete</button>
-    </div>`;
-  }
-
-  return `<div class="card lesson">
-    <h3>${title}</h3>
-    <div class="lesson-meta"><span>Course ID: ${courseId}</span><span>Lesson Title: ${title}</span></div>
-    <p>${l.content||""}</p>
-    <button class="success" onclick="markLesson('${courseId}','${l.lessonId}')">Mark Complete</button>
-  </div>`;
-}
-
 function normaliseDriveVideoUrl(url){
   url=String(url||"").trim();
   if(!url)return "";
@@ -594,153 +454,92 @@ function normaliseDriveVideoUrl(url){
   if(url.includes("drive.google.com")&&openMatch)return "https://drive.google.com/file/d/"+openMatch[1]+"/preview";
   return url;
 }
-function escapeHtml(text){
-  return String(text||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
-}
-function escapeAttr(text){
-  return String(text||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/[\r\n]/g," ");
-}
-function isDirectVideoFile(url){
-  return /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(String(url||""));
-}
-function makeVideoPlayerHtml(embedUrl,originalUrl){
-  const safeEmbed=escapeHtml(embedUrl||"");
-  const safeOriginal=escapeHtml(originalUrl||embedUrl||"");
-  if(isDirectVideoFile(originalUrl) || isDirectVideoFile(embedUrl)){
-    return `<video controls playsinline preload="metadata" src="${safeOriginal}"></video><p class="muted"><a href="${safeOriginal}" target="_blank" rel="noopener">Open video in new tab</a></p>`;
+async function openCourse(courseId,btn){
+  beginSync(btn,"Synchronising");
+  if(userRole()==="STUDENT"){
+    const course=(latestCourses||[]).find(c=>String(getCourseId(c))===String(courseId));
+    if(course && String(course.enrollmentStatus||"").toUpperCase()!=="APPROVED"){
+      alert("This course needs Admin approval before you can start.");
+      endSync(btn);
+      return;
+    }
   }
-  if(String(embedUrl||"").includes("drive.google.com")){
-    return `<iframe src="${safeEmbed}" allow="autoplay; fullscreen" allowfullscreen></iframe><p class="muted">If the video does not show, click <a href="${safeEmbed}" target="_blank" rel="noopener">Open video in new tab</a>. Make sure the Drive file sharing is set to Anyone with the link can view.</p>`;
-  }
-  const joiner = embedUrl.includes("?") ? "&" : "?";
-  return `<iframe src="${safeEmbed}${joiner}autoplay=1&rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe><p class="muted"><a href="${safeOriginal}" target="_blank" rel="noopener">Open video in new tab</a></p>`;
+  showTab("coursesView",document.querySelectorAll(".tab")[1]);
+  const lessonArea=document.getElementById("lessonArea");
+  if(!courseId){ if(lessonArea)lessonArea.innerHTML='<div class="card"><h2>Course could not open</h2></div>'; endSync(btn); return; }
+  if(lessonArea)lessonArea.innerHTML='<div class="card"><h2>Synchronising course...</h2></div>';
+  let lessonsData, quizData;
+  try{ lessonsData=await api("getLessons",{courseId}); }catch(e){ lessonsData={lessons:[]}; }
+  try{ quizData=await api("getQuiz",{courseId}); }catch(e){ quizData={quiz:[]}; }
+  const lessons=(lessonsData.lessons||[]).map(l=>{
+    let rawLink = l.videoLink||l.VIDEO_LINK||l['VIDEO LINK']||l.link||l.LINK||l.url||l.URL||l.youtubeLink||"";
+    if(!rawLink && l.previewUrl) rawLink = l.previewUrl;
+    return { ...l, videoLink: rawLink };
+  });
+  const quiz=(quizData.quiz||[]).map(normaliseQuiz);
+  if(lessonArea)lessonArea.innerHTML=`<div class="card"><h2>Lessons</h2>${lessons.length?lessons.map(l=>lessonHtml(l)).join(""):"<p>No lessons found for this course yet.</p>"}</div><div class="card"><h2>Quiz</h2>${quiz.length?quiz.map(q=>quizHtml(q)).join(""):"<p>No quiz yet.</p>"}</div>`;
+  endSync(btn);
 }
-
+function normaliseQuiz(q){ return { quizId:q.quizId||q.QUIZ_ID||"", question:q.question||q.QUESTION||"", optionA:q.optionA||q.OPTION_A||"", optionB:q.optionB||q.OPTION_B||"", optionC:q.optionC||q.OPTION_C||"", optionD:q.optionD||q.OPTION_D||"", answer:q.answer||q.ANSWER||"" }; }
+function lessonHtml(l){
+  const courseId = l.courseId || "";
+  const title = l.title || "Untitled Lesson";
+  let videoUrl = l.videoLink || "";
+  if(!videoUrl && l.VIDEO_LINK) videoUrl = l.VIDEO_LINK;
+  const playableUrl = normaliseDriveVideoUrl(videoUrl);
+  const youtubeId = extractYouTubeId(videoUrl || playableUrl);
+  const isVideo = String(l.lessonType || "").toUpperCase() === "VIDEO" || !!videoUrl;
+  if(isVideo && videoUrl){
+    const thumb = youtubeId ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` : (playableUrl.includes("drive.google.com") ? `https://drive.google.com/uc?export=view&id=${extractDriveId(videoUrl)}` : "");
+    const embedUrl = youtubeId ? `https://www.youtube.com/embed/${youtubeId}` : playableUrl;
+    const playerId = "player_" + String(l.lessonId || Math.random()).replace(/[^a-zA-Z0-9_]/g,"_");
+    const thumbHtml = thumb ? `<img src="${thumb}" alt="${title}" loading="lazy" onerror="this.parentNode.innerHTML='VIDEO LESSON'"><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>` : `<span>VIDEO LESSON</span><span class="video-play-btn">▶</span><span class="video-start-label">Start Lesson</span>`;
+    return `<div class="card lesson"><h3>${title}</h3><div class="lesson-meta"><span>Course ID: ${courseId}</span></div><p>${l.content||""}</p><div id="${playerId}" class="video-card-thumb" onclick="startLessonVideo('${playerId}','${escapeAttr(embedUrl)}','${escapeAttr(videoUrl)}')">${thumbHtml}</div><button onclick="startLessonVideo('${playerId}','${escapeAttr(embedUrl)}','${escapeAttr(videoUrl)}')">Start Lesson</button><button class="success" onclick="markLesson('${courseId}','${l.lessonId}')">Mark Complete</button></div>`;
+  }
+  return `<div class="card lesson"><h3>${title}</h3><div class="lesson-meta"><span>Course ID: ${courseId}</span></div><p>${l.content||""}</p><button class="success" onclick="markLesson('${courseId}','${l.lessonId}')">Mark Complete</button></div>`;
+}
 function startLessonVideo(playerId,embedUrl,originalUrl){
   const box=document.getElementById(playerId);
   if(!box)return;
-  if(!embedUrl){
-    box.innerHTML='<p class="muted">No video link found in the LESSONS sheet VIDEO_LINK column.</p>';
-    return;
-  }
+  if(!embedUrl){ box.innerHTML='<p class="muted">No video link found.</p>'; return; }
   box.className="lesson-video";
-  box.innerHTML=makeVideoPlayerHtml(embedUrl,originalUrl||embedUrl);
+  const safeEmbed=escapeHtml(embedUrl);
+  const safeOriginal=escapeHtml(originalUrl||embedUrl);
+  if(isDirectVideoFile(originalUrl) || isDirectVideoFile(embedUrl)){
+    box.innerHTML=`<video controls playsinline preload="metadata" src="${safeOriginal}"></video><p class="muted"><a href="${safeOriginal}" target="_blank" rel="noopener">Open video in new tab</a></p>`;
+  } else if(String(embedUrl).includes("drive.google.com")){
+    box.innerHTML=`<iframe src="${safeEmbed}" allow="autoplay; fullscreen" allowfullscreen></iframe><p class="muted">If video does not show, click <a href="${safeEmbed}" target="_blank" rel="noopener">Open video in new tab</a>. Ensure Drive file sharing is set to Anyone with the link can view.</p>`;
+  } else {
+    const joiner = embedUrl.includes("?") ? "&" : "?";
+    box.innerHTML=`<iframe src="${safeEmbed}${joiner}autoplay=1&rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe><p class="muted"><a href="${safeOriginal}" target="_blank" rel="noopener">Open video in new tab</a></p>`;
+  }
 }
-function quizHtml(q){return `<div class="lesson"><h3>${q.question}</h3><div class="quiz-option" onclick="answerQuiz('${q.quizId}','A','${q.answer}')">A. ${q.optionA}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','B','${q.answer}')">B. ${q.optionB}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','C','${q.answer}')">C. ${q.optionC}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','D','${q.answer}')">D. ${q.optionD}</div></div>`;}
-function youtubeEmbed(url){
-  const id=extractYouTubeId(url);
-  if(id)return "https://www.youtube.com/embed/"+id;
-  return url||"";
-}
-async function markLesson(courseId,lessonId){await api("saveProgress",{userId:currentUser.userId,courseId,lessonId,status:"COMPLETED",score:0});alert("Lesson marked complete.");loadProgress();}
-function answerQuiz(id,selected,answer){alert(selected===answer?"Correct answer!":"Incorrect answer. Correct answer is "+answer);}
-function loadProgress(){document.getElementById("statLessons").textContent="0";document.getElementById("statScore").textContent="0%";document.getElementById("statAttendance").textContent="0%";document.getElementById("overallProgress").style.width="0%";document.getElementById("overallProgressText").textContent="0%";}
-async function createCourse(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{if(!canUploadLessons()){alert("Only Admin and Teachers can upload courses.");return;}const access=val("newCourseAccess");const price=access==="FREE"?0:val("newCoursePrice");const data=await api("createCourse",{courseName:val("newCourseName"),description:val("newCourseDescription"),category:val("newCourseCategory"),price:price,access:access,thumbnail:val("newCourseThumbnail"),createdBy:currentUser.userId});showMsg("courseMessage",data.message||"Course saved.");loadCourses();}finally{endSync(btn);}}
-async function createLesson(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{if(!canUploadLessons()){alert("Only Admin and Teachers can upload lessons.");return;}const video=val("lessonVideo");const data=await api("createLesson",{courseId:val("lessonCourseId"),title:val("lessonTitle"),lessonType:val("lessonType"),content:val("lessonContent"),videoLink:video,createdBy:currentUser.userId});showMsg("lessonMessage",data.message||"Lesson saved.");const preview=document.getElementById("lessonVideoLinkPreview");if(preview&&video){preview.textContent=video;preview.classList.remove("hidden");}}finally{endSync(btn);}}
-async function createAssignment(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createAssignment",{courseId:val("assignmentCourseId"),title:val("assignmentTitle"),instructions:val("assignmentInstructions")});alert("Assignment created.");}finally{endSync(btn);}}
-async function loadUsers(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{const data=await api("getUsers");const users=data.users||[];document.getElementById("usersBody").innerHTML=users.length?users.map(u=>`<tr><td>${u.fullName}</td><td>${u.username}</td><td>${u.email}</td><td>${u.role}</td><td>${u.status}</td></tr>`).join(""):`<tr><td colspan="5">No users found.</td></tr>`;}finally{endSync(btn);}}
-async function createUser(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createUser",{fullName:val("userFullName"),username:val("userUsername"),email:val("userEmail"),password:val("userPassword"),role:val("userRole")});alert("User created.");}finally{endSync(btn);}}
-async function saveWhatsAppNotification(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("saveWhatsAppNotification",{phone:val("waPhone"),message:val("waMessage")});alert("WhatsApp notification logged.");}finally{endSync(btn);}}
-async function recordPayment(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("recordPayment",{userId:currentUser.userId,courseId:val("payCourseId"),amount:val("payAmount"),method:val("payMethod")});alert("Payment recorded.");}finally{endSync(btn);}}
-async function createLiveClass(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("createLiveClass",{title:val("liveTitle"),courseId:val("liveCourseId"),zoomLink:val("liveZoom"),dateTime:val("liveDate")});alert("Live class saved.");}finally{endSync(btn);}}
-async function saveAttendance(){const btn=buttonFromEvent();beginSync(btn,"Synchronising");try{await api("saveAttendance",{userId:currentUser.userId,courseId:val("attCourseId"),status:val("attStatus")});alert("Attendance saved.");}finally{endSync(btn);}}
-
-function setCourseFreePaid(){
-  const access=val("newCourseAccess");
-  const price=document.getElementById("newCoursePrice");
-  if(price && access==="FREE")price.value=0;
-  if(price && access==="PAID" && Number(price.value||0)===0)price.value=1;
-}
-async function setCourseAccess(courseId,access,btn){
-  beginSync(btn,"Synchronising");
-  try{
-    await api("setCourseAccess",{courseId,access});
-    alert("Course set to "+access+".");
-    await loadCourses();
-  }finally{endSync(btn);}
-}
-async function requestEnrollment(courseId,btn){
-  beginSync(btn,"Synchronising");
-  try{
-    const data=await api("requestEnrollment",{userId:currentUser.userId,courseId});
-    alert(data.message||"Approval request sent to Admin.");
-    await loadCourses();
-  }finally{endSync(btn);}
-}
-async function loadEnrollmentRequests(){
-  const btn=buttonFromEvent();beginSync(btn,"Synchronising");
-  try{
-    const data=await api("getEnrollmentRequests",{adminId:currentUser.userId});
-    const box=document.getElementById("enrollmentRequests");
-    const rows=data.requests||[];
-    box.innerHTML=rows.length?rows.map(r=>`<div class="card enrollment-card"><h3>${r.studentName||r.userId}</h3><p class="muted">Course: ${r.courseName||r.courseId}<br>Status: ${r.status}</p><button class="success" onclick="approveEnrollment('${r.enrollmentId}','APPROVED',this)">Approve</button> <button class="danger" onclick="approveEnrollment('${r.enrollmentId}','REJECTED',this)">Reject</button></div>`).join(""):"<p class='muted'>No pending approvals.</p>";
-  }finally{endSync(btn);}
-}
-async function approveEnrollment(enrollmentId,status,btn){
-  beginSync(btn,"Synchronising");
-  try{
-    await api("approveEnrollment",{enrollmentId,status,adminId:currentUser.userId});
-    alert("Enrollment "+status+".");
-    await loadEnrollmentRequests();
-  }finally{endSync(btn);}
-}
-async function loadAdminStudents(){
-  const btn=buttonFromEvent();beginSync(btn,"Synchronising");
-  try{
-    const data=await api("getAdminStudents",{adminId:currentUser.userId});
-    const box=document.getElementById("adminStudentsList");
-    const students=data.students||[];
-    box.innerHTML=students.length?students.map(s=>`<div class="student-row"><div><strong>${s.name}</strong><br><span class="muted">${s.email||""}</span></div><div><div class="progress"><div class="progress-fill" style="width:${s.progress||0}%"></div></div><strong>${s.progress||0}%</strong></div><button onclick="openAdminStudent('${s.userId}',this)">Open</button></div>`).join(""):"<p class='muted'>No enrolled students found.</p>";
-  }finally{endSync(btn);}
-}
-async function openAdminStudent(userId,btn){
-  beginSync(btn,"Synchronising");
-  try{
-    const data=await api("getStudentDetail",{userId});
-    const box=document.getElementById("adminStudentDetail");
-    const courses=data.courses||[];
-    box.innerHTML=`<div class="card"><h2>${data.studentName||"Student"} Studies</h2>${courses.length?courses.map(c=>`<div class="lesson"><h3>${c.courseName}</h3><p class="muted">Status: ${c.status}</p><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><strong>${c.progress||0}%</strong></div>`).join(""):"<p class='muted'>No studies found.</p>"}</div>`;
-  }finally{endSync(btn);}
-}
-
-
-function fileToBase64(file){
-  return new Promise((resolve,reject)=>{
-    const reader=new FileReader();
-    reader.onload=()=>resolve(String(reader.result).split(",")[1]);
-    reader.onerror=reject;
-    reader.readAsDataURL(file);
-  });
-}
-async function uploadLessonVideoToDrive(){
-  const btn=buttonFromEvent();
-  beginSync(btn,"Uploading");
-  const status=document.getElementById("lessonUploadStatus");
-  try{
-    if(!canUploadLessons()){alert("Only Admin and Teachers can upload videos.");return;}
-    const file=document.getElementById("lessonVideoFile").files[0];
-    if(!file){alert("Please select a video file first.");return;}
-    if(status){status.textContent="Uploading video to Google Drive...";status.classList.remove("hidden");}
-    const base64=await fileToBase64(file);
-    const data=await api("uploadVideoToDrive",{
-      fileName:file.name,
-      mimeType:file.type || "video/mp4",
-      base64:base64,
-      courseId:val("lessonCourseId"),
-      title:val("lessonTitle"),
-      uploadedBy:currentUser.userId
-    });
-    const driveLink=data.previewUrl||data.fileUrl||"";
-    document.getElementById("lessonVideo").value=driveLink;
-    const preview=document.getElementById("lessonVideoLinkPreview");
-    if(preview){preview.innerHTML=`Google Drive video link:<br><a href="${escapeHtml(driveLink)}" target="_blank" rel="noopener">Open uploaded video</a><br>${escapeHtml(driveLink)}`;preview.classList.remove("hidden");}
-    if(status){status.textContent="Upload complete. The Google Drive link has been added to the video link field and will play in the lesson video view.";}
-  }catch(e){
-    if(status){status.textContent="Upload failed: "+e.message;status.classList.remove("hidden");}
-  }finally{endSync(btn);}
-}
-
+function isDirectVideoFile(url){ return /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(String(url||"")); }
+function quizHtml(q){ return `<div class="lesson"><h3>${q.question}</h3><div class="quiz-option" onclick="answerQuiz('${q.quizId}','A','${q.answer}')">A. ${q.optionA}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','B','${q.answer}')">B. ${q.optionB}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','C','${q.answer}')">C. ${q.optionC}</div><div class="quiz-option" onclick="answerQuiz('${q.quizId}','D','${q.answer}')">D. ${q.optionD}</div></div>`;}
+function answerQuiz(id,selected,answer){ alert(selected===answer?"Correct answer!":"Incorrect answer. Correct answer is "+answer); }
+async function markLesson(courseId,lessonId){ await api("saveProgress",{userId:currentUser.userId,courseId,lessonId,status:"COMPLETED",score:0}); alert("Lesson marked complete."); loadProgress(); }
+function loadProgress(){ document.getElementById("statLessons").textContent="0"; document.getElementById("statScore").textContent="0%"; document.getElementById("statAttendance").textContent="0%"; document.getElementById("overallProgress").style.width="0%"; document.getElementById("overallProgressText").textContent="0%"; }
+async function createCourse(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ if(!canUploadLessons()){alert("Only Admin and Teachers can upload courses.");return;} const access=val("newCourseAccess"); const price=access==="FREE"?0:val("newCoursePrice"); await api("createCourse",{courseName:val("newCourseName"),description:val("newCourseDescription"),category:val("newCourseCategory"),price:price,access:access,thumbnail:val("newCourseThumbnail"),createdBy:currentUser.userId}); showMsg("courseMessage","Course saved."); loadCourses(); }finally{endSync(btn);} }
+async function createLesson(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ if(!canUploadLessons()){alert("Only Admin and Teachers can upload lessons.");return;} const video=val("lessonVideo"); await api("createLesson",{courseId:val("lessonCourseId"),title:val("lessonTitle"),lessonType:val("lessonType"),content:val("lessonContent"),videoLink:video,createdBy:currentUser.userId}); showMsg("lessonMessage","Lesson saved."); const preview=document.getElementById("lessonVideoLinkPreview"); if(preview&&video){preview.textContent=video;preview.classList.remove("hidden");} }finally{endSync(btn);} }
+async function createAssignment(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ await api("createAssignment",{courseId:val("assignmentCourseId"),title:val("assignmentTitle"),instructions:val("assignmentInstructions")}); alert("Assignment created."); }finally{endSync(btn);} }
+async function loadUsers(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ const data=await api("getUsers"); const users=data.users||[]; document.getElementById("usersBody").innerHTML=users.length?users.map(u=>`<tr><td>${u.fullName}</td><td>${u.username}</td><td>${u.email}</td><td>${u.role}</td><td>${u.status}</td></tr>`).join(""):`<tr><td colspan="5">No users found.</td></tr>`; }finally{endSync(btn);} }
+async function createUser(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ await api("createUser",{fullName:val("userFullName"),username:val("userUsername"),email:val("userEmail"),password:val("userPassword"),role:val("userRole")}); alert("User created."); }finally{endSync(btn);} }
+async function saveWhatsAppNotification(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ await api("saveWhatsAppNotification",{phone:val("waPhone"),message:val("waMessage")}); alert("WhatsApp notification logged."); }finally{endSync(btn);} }
+async function recordPayment(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ await api("recordPayment",{userId:currentUser.userId,courseId:val("payCourseId"),amount:val("payAmount"),method:val("payMethod")}); alert("Payment recorded."); }finally{endSync(btn);} }
+async function createLiveClass(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ await api("createLiveClass",{title:val("liveTitle"),courseId:val("liveCourseId"),zoomLink:val("liveZoom"),dateTime:val("liveDate")}); alert("Live class saved."); }finally{endSync(btn);} }
+async function saveAttendance(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ await api("saveAttendance",{userId:currentUser.userId,courseId:val("attCourseId"),status:val("attStatus")}); alert("Attendance saved."); }finally{endSync(btn);} }
+function setCourseFreePaid(){ const access=val("newCourseAccess"); const price=document.getElementById("newCoursePrice"); if(price && access==="FREE")price.value=0; if(price && access==="PAID" && Number(price.value||0)===0)price.value=1; }
+async function setCourseAccess(courseId,access,btn){ beginSync(btn,"Synchronising"); try{ await api("setCourseAccess",{courseId,access}); alert("Course set to "+access+"."); await loadCourses(); }finally{endSync(btn);} }
+async function requestEnrollment(courseId,btn){ beginSync(btn,"Synchronising"); try{ const data=await api("requestEnrollment",{userId:currentUser.userId,courseId}); alert(data.message||"Approval request sent."); await loadCourses(); }finally{endSync(btn);} }
+async function loadEnrollmentRequests(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ const data=await api("getEnrollmentRequests",{adminId:currentUser.userId}); const box=document.getElementById("enrollmentRequests"); const rows=data.requests||[]; box.innerHTML=rows.length?rows.map(r=>`<div class="card enrollment-card"><h3>${r.studentName||r.userId}</h3><p>Course: ${r.courseName||r.courseId}<br>Status: ${r.status}</p><button class="success" onclick="approveEnrollment('${r.enrollmentId}','APPROVED',this)">Approve</button> <button class="danger" onclick="approveEnrollment('${r.enrollmentId}','REJECTED',this)">Reject</button></div>`).join(""):"<p>No pending approvals.</p>"; }finally{endSync(btn);} }
+async function approveEnrollment(enrollmentId,status,btn){ beginSync(btn,"Synchronising"); try{ await api("approveEnrollment",{enrollmentId,status,adminId:currentUser.userId}); alert("Enrollment "+status+"."); await loadEnrollmentRequests(); }finally{endSync(btn);} }
+async function loadAdminStudents(){ const btn=buttonFromEvent(); beginSync(btn,"Synchronising"); try{ const data=await api("getAdminStudents",{adminId:currentUser.userId}); const box=document.getElementById("adminStudentsList"); const students=data.students||[]; box.innerHTML=students.length?students.map(s=>`<div class="student-row"><div><strong>${s.name}</strong><br><span class="muted">${s.email||""}</span></div><div><div class="progress"><div class="progress-fill" style="width:${s.progress||0}%"></div></div><strong>${s.progress||0}%</strong></div><button onclick="openAdminStudent('${s.userId}',this)">Open</button></div>`).join(""):"<p>No enrolled students found.</p>"; }finally{endSync(btn);} }
+async function openAdminStudent(userId,btn){ beginSync(btn,"Synchronising"); try{ const data=await api("getStudentDetail",{userId}); const box=document.getElementById("adminStudentDetail"); const courses=data.courses||[]; box.innerHTML=`<div class="card"><h2>${data.studentName||"Student"} Studies</h2>${courses.length?courses.map(c=>`<div class="lesson"><h3>${c.courseName}</h3><p>Status: ${c.status}</p><div class="progress"><div class="progress-fill" style="width:${c.progress||0}%"></div></div><strong>${c.progress||0}%</strong></div>`).join(""):"<p>No studies found.</p>"}</div>`; }finally{endSync(btn);} }
+function fileToBase64(file){ return new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(String(reader.result).split(",")[1]); reader.onerror=reject; reader.readAsDataURL(file); }); }
+async function uploadLessonVideoToDrive(){ const btn=buttonFromEvent(); beginSync(btn,"Uploading"); const status=document.getElementById("lessonUploadStatus"); try{ if(!canUploadLessons()){alert("Only Admin and Teachers can upload videos.");return;} const file=document.getElementById("lessonVideoFile").files[0]; if(!file){alert("Please select a video file first.");return;} if(status){status.textContent="Uploading video to Google Drive...";status.classList.remove("hidden");} const base64=await fileToBase64(file); const data=await api("uploadVideoToDrive",{ fileName:file.name, mimeType:file.type || "video/mp4", base64:base64, courseId:val("lessonCourseId"), title:val("lessonTitle"), uploadedBy:currentUser.userId }); const driveLink=data.previewUrl||data.fileUrl||""; document.getElementById("lessonVideo").value=driveLink; const preview=document.getElementById("lessonVideoLinkPreview"); if(preview){preview.innerHTML=`Google Drive video link:<br><a href="${escapeHtml(driveLink)}" target="_blank" rel="noopener">Open uploaded video</a><br>${escapeHtml(driveLink)}`;preview.classList.remove("hidden");} if(status){status.textContent="Upload complete. The Google Drive link has been added.";} }catch(e){ if(status){status.textContent="Upload failed: "+e.message;status.classList.remove("hidden");} }finally{endSync(btn);} }
 function val(id){return document.getElementById(id).value;}
+function escapeHtml(text){ return String(text||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function escapeAttr(text){ return String(text||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/[\r\n]/g," "); }
 window.addEventListener("load",()=>{const saved=localStorage.getItem("op_school_user");if(saved){currentUser=JSON.parse(saved);showApp();loadDashboard();}});
 </script>
 </body>
