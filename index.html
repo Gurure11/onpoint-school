@@ -281,6 +281,44 @@
       padding: 3rem;
     }
 
+    .auth-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .auth-tab {
+      flex: 1;
+      border: none;
+      padding: 10px;
+      border-radius: 30px;
+      cursor: pointer;
+      background: #e2e8f0;
+      color: #0f172a;
+      font-weight: 700;
+    }
+    .auth-tab.active {
+      background: #0f3b4c;
+      color: #ffffff;
+    }
+    .auth-note {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-top: 10px;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .auth-status {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 20px;
+      background: #fef9e3;
+      color: #0f172a;
+      font-size: 0.82rem;
+      text-align: center;
+    }
+
     .progress-wrap {
       background: #e2e8f0;
       border-radius: 999px;
@@ -327,7 +365,7 @@
 
 <script>
   // ======================= CONFIGURATION =========================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFikZ97iw8fSzhnD7VHI0NcfkWiHddnIQ0Zx2MXivWqjD2SZV_Ap_ghrhsLwwJMPoD/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyM_jHfx9UBBWPLWh5epiqbGKLswpN5EYvDWXDYAdGd3fmljhQOxC3hmlRJxNjkjSKP/exec";
   const SHEET_ID = "1a7DzlDW_VLVZIZuvqW4_q3euqxDW264aU-A4QQj4wYQ";
   const API_KEY = "";
 
@@ -383,7 +421,9 @@
       window[callbackName] = function(data) {
         cleanup();
         if (data && data.success === false) {
-          reject(new Error((data.code || "SCRIPT_ERROR") + ": " + (data.message || "Apps Script returned an error.")));
+          const message = (data.message || "Apps Script returned an error.");
+          const code = data.code || "SCRIPT_ERROR";
+          reject(new Error(code === "UNKNOWN_ACTION" ? "Apps Script is missing this action. Paste and deploy the updated Apps Script, then update the SCRIPT_URL if Google gives you a new URL. Details: " + message : code + ": " + message));
         } else {
           resolve(data || { success: true });
         }
@@ -587,6 +627,41 @@
     }
   }
 
+
+  function setAuthStatus(message, state = "checking") {
+    const el = document.getElementById("authStatus");
+    if (!el) return;
+
+    el.style.display = "block";
+    el.textContent = message;
+
+    if (state === "success") {
+      el.style.background = "#dcfce7";
+      el.style.color = "#14532d";
+    } else if (state === "error") {
+      el.style.background = "#fee2e2";
+      el.style.color = "#7f1d1d";
+    } else {
+      el.style.background = "#fef9e3";
+      el.style.color = "#0f172a";
+    }
+  }
+
+  function setAuthButtonsDisabled(disabled) {
+    const loginBtn = document.getElementById("loginBtn");
+    const registerBtn = document.getElementById("registerBtn");
+
+    if (loginBtn) {
+      loginBtn.disabled = disabled;
+      loginBtn.textContent = disabled ? "Synchronising..." : "Login";
+    }
+
+    if (registerBtn) {
+      registerBtn.disabled = disabled;
+      registerBtn.textContent = disabled ? "Synchronising..." : "Register & Start Learning";
+    }
+  }
+
   async function loginUser() {
     const emailOrUsername = document.getElementById("loginEmail").value.trim();
     const password = document.getElementById("loginPassword").value.trim();
@@ -596,12 +671,21 @@
       return;
     }
 
+    setAuthStatus("Synchronising login with Google Sheet...", "checking");
+    setAuthButtonsDisabled(true);
+
     try {
       const data = await api("loginUser", { emailOrUsername, password });
       currentUser = normaliseUser(data.user);
+      setAuthStatus("Login successful.", "success");
+      alert("Login successful. Welcome " + (currentUser.FULL_NAME || currentUser.EMAIL || "back") + ".");
       renderApp();
     } catch (error) {
-      alert(error.message || "Login failed.");
+      const msg = error.message || "Login failed.";
+      setAuthStatus(msg, "error");
+      alert("Login failed: " + msg);
+    } finally {
+      setAuthButtonsDisabled(false);
     }
   }
 
@@ -616,6 +700,9 @@
       return;
     }
 
+    setAuthStatus("Synchronising registration with Google Sheet...", "checking");
+    setAuthButtonsDisabled(true);
+
     try {
       const data = await api("registerUser", {
         fullName,
@@ -625,9 +712,15 @@
         role: "STUDENT"
       });
       currentUser = normaliseUser(data.user);
+      setAuthStatus("Registration successful.", "success");
+      alert("Registration successful. Welcome " + (currentUser.FULL_NAME || currentUser.EMAIL || "student") + ".");
       renderApp();
     } catch (error) {
-      alert(error.message || "Registration failed.");
+      const msg = error.message || "Registration failed.";
+      setAuthStatus(msg, "error");
+      alert("Registration failed: " + msg);
+    } finally {
+      setAuthButtonsDisabled(false);
     }
   }
 
@@ -670,7 +763,7 @@
             <h2>Login</h2>
             <input id="loginEmail" type="text" placeholder="Email or username" />
             <input id="loginPassword" type="password" placeholder="Password" />
-            <button onclick="loginUser()">Login</button>
+            <button id="loginBtn" onclick="loginUser()">Login</button>
             <div class="toggle-auth" onclick="toggleAuthMode('register')">Student? Register here</div>
           </div>
 
@@ -680,9 +773,11 @@
             <input id="regUsername" type="text" placeholder="Username" />
             <input id="regEmail" type="email" placeholder="Email" />
             <input id="regPassword" type="password" placeholder="Password" />
-            <button onclick="registerStudent()">Register & Start Learning</button>
+            <button id="registerBtn" onclick="registerStudent()">Register & Start Learning</button>
             <div class="toggle-auth" onclick="toggleAuthMode('login')">Already registered? Login</div>
           </div>
+
+          <div id="authStatus" class="auth-status"></div>
         </div>
       </div>
     `;
@@ -724,13 +819,17 @@
   
   function renderApp() {
     const root = document.getElementById("appRoot");
+
     if (!currentUser) {
       root.innerHTML = renderAuthOverlay();
       return;
     }
+
     root.innerHTML = renderDashboard();
     attachDashboardEvents();
-    initialiseSheets().then((ok) => { if (ok) loadLessons(); else updateLessonsDOM(); }).catch(() => updateLessonsDOM());
+    initialiseSheets()
+      .then((ok) => { if (ok) loadLessons(); else updateLessonsDOM(); })
+      .catch(() => updateLessonsDOM());
   }
 
   function renderDashboard() {
@@ -775,7 +874,7 @@
       <div id="videoModal" class="video-modal">
         <div class="video-container">
           <button class="close-vid" id="closeModalBtn">&times;</button>
-          <iframe id="lessonIframe" src="" allow="autoplay; fullscreen" allowfullscreen></iframe>
+          <iframe id="lessonIframe" src="" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
         </div>
       </div>
     `;
@@ -831,39 +930,61 @@
 
       let embedUrl = String(videoUrl).trim();
 
+      function extractYouTubeId(urlText) {
+        try {
+          const url = new URL(urlText);
+
+          if (url.hostname.includes("youtu.be")) {
+            return url.pathname.replace("/", "").split("?")[0];
+          }
+
+          if (url.hostname.includes("youtube.com")) {
+            if (url.pathname === "/watch") {
+              return url.searchParams.get("v") || "";
+            }
+
+            if (url.pathname.includes("/shorts/")) {
+              return url.pathname.split("/shorts/")[1].split("/")[0].split("?")[0];
+            }
+
+            if (url.pathname.includes("/embed/")) {
+              return url.pathname.split("/embed/")[1].split("/")[0].split("?")[0];
+            }
+
+            if (url.pathname.includes("/live/")) {
+              return url.pathname.split("/live/")[1].split("/")[0].split("?")[0];
+            }
+          }
+        } catch (e) {
+          const match = String(urlText).match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([A-Za-z0-9_-]{6,})/);
+          return match ? match[1] : "";
+        }
+
+        return "";
+      }
+
       // Google Drive share links must use /preview inside iframe.
       if (embedUrl.includes("drive.google.com")) {
         const match = embedUrl.match(/\/d\/([^/]+)/) || embedUrl.match(/[?&]id=([^&]+)/);
         if (match) embedUrl = `https://drive.google.com/file/d/${match[1]}/preview`;
       }
 
-      // YouTube normal watch/share/shorts links refuse iframe connection unless converted to /embed/.
+      // YouTube refuses normal watch/share URLs in iframes.
+      // Convert every supported YouTube URL to the official embed URL.
       if (embedUrl.includes("youtube.com") || embedUrl.includes("youtu.be")) {
-        let videoId = "";
+        const videoId = extractYouTubeId(embedUrl);
 
-        try {
-          const url = new URL(embedUrl);
-
-          if (url.hostname.includes("youtu.be")) {
-            videoId = url.pathname.replace("/", "").split("?")[0];
-          } else if (url.pathname.includes("/watch")) {
-            videoId = url.searchParams.get("v") || "";
-          } else if (url.pathname.includes("/shorts/")) {
-            videoId = url.pathname.split("/shorts/")[1].split("/")[0].split("?")[0];
-          } else if (url.pathname.includes("/embed/")) {
-            videoId = url.pathname.split("/embed/")[1].split("/")[0].split("?")[0];
-          }
-
-          if (videoId) {
-            embedUrl = `https://www.youtube.com/embed/${videoId}`;
-          }
-        } catch (e) {
-          console.warn("Could not parse YouTube link:", e);
+        if (!videoId) {
+          alert("This YouTube link could not be read. Please use a normal YouTube video link.");
+          return;
         }
+
+        embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
       }
 
       const modal = document.getElementById("videoModal");
       const iframe = document.getElementById("lessonIframe");
+
       iframe.src = embedUrl;
       modal.style.display = "flex";
     };
