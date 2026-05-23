@@ -280,6 +280,43 @@
       text-align: center;
       padding: 3rem;
     }
+
+    .progress-wrap {
+      background: #e2e8f0;
+      border-radius: 999px;
+      height: 12px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    .progress-bar {
+      height: 100%;
+      background: #0f3b4c;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .small-muted {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-top: 6px;
+    }
+    .stats-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      padding: 12px;
+      margin-top: 12px;
+    }
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #0f172a;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 30px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -295,7 +332,7 @@
   const API_KEY = "";
 
   const REQUIRED_TABS = {
-    Users: ["USER_ID", "FULL_NAME", "USERNAME", "EMAIL", "PASSWORD", "ROLE", "STATUS", "DATE_CREATED"],
+    USERS: ["USER_ID", "FULL_NAME", "USERNAME", "EMAIL", "PASSWORD", "ROLE", "STATUS", "DATE_CREATED"],
     Courses: ["COURSE_ID", "COURSE_NAME", "DESCRIPTION", "CATEGORY", "PRICE", "ACCESS", "THUMBNAIL", "CREATED_BY", "DATE_CREATED"],
     Topics: ["TOPIC_ID", "COURSE_ID", "TITLE", "DESCRIPTION", "ORDER", "DATE_CREATED"],
     LESSONS: ["LESSON_ID", "COURSE_ID", "TOPIC_ID", "TITLE", "DESCRIPTION", "CONTENT", "VIDEO_LINK", "CREATED_BY", "DATE_CREATED"],
@@ -306,9 +343,12 @@
     Progress: ["PROGRESS_ID", "USER_ID", "COURSE_ID", "LESSON_ID", "STATUS", "SCORE", "COMPLETED_AT"]
   };
 
-  // Login removed for now. The app opens directly with teacher/admin controls visible.
-  let currentUser = { email: "Onpoint School", isAdmin: true, role: "ADMIN" };
+  // Login enabled. Roles: ADMIN and TEACHER can upload lessons. STUDENT can learn and track progress.
+  let currentUser = null;
   let lessonsList = [];
+  let studentProgress = [];
+  let progressSummary = [];
+  let allUsers = [];
   let setupComplete = false;
   let setupError = "";
 
@@ -472,29 +512,238 @@
 
       return {
         id: lessonId,
+        courseId: getField(l, ["COURSE_ID", "CourseId", "courseId"]),
         title: getField(l, ["TITLE", "Title", "Lesson", "lessonTitle"]) || "Untitled Lesson",
         desc: getField(l, ["DESCRIPTION", "Description", "CONTENT", "Content"]) || "No description",
         videoLink: rawVideo
       };
     });
 
+    if (currentUser && currentUser.role === "STUDENT") {
+      await loadStudentProgress();
+    }
+
+    if (currentUser && (currentUser.role === "ADMIN" || currentUser.role === "TEACHER")) {
+      await loadProgressSummary();
+    }
+
     updateLessonsDOM();
   }
 
+  async function loadStudentProgress() {
+    if (!currentUser) return;
+    try {
+      const data = await api("getProgress", { userId: currentUser.USER_ID || currentUser.userId });
+      studentProgress = data.progress || data.rows || [];
+    } catch (error) {
+      studentProgress = [];
+      console.warn("Could not load student progress:", error.message);
+    }
+  }
+
+  async function loadProgressSummary() {
+    try {
+      const data = await api("getProgressSummary");
+      progressSummary = data.students || [];
+      allUsers = data.users || [];
+    } catch (error) {
+      progressSummary = [];
+      allUsers = [];
+      console.warn("Could not load progress summary:", error.message);
+    }
+  }
+
+  function getStudentProgressPercent() {
+    if (!currentUser || !lessonsList.length) return 0;
+    const done = new Set(
+      studentProgress
+        .filter(p => String(getField(p, ["STATUS", "Status", "status"])).toUpperCase() === "DONE" || String(getField(p, ["STATUS", "Status", "status"])).toUpperCase() === "COMPLETED")
+        .map(p => String(getField(p, ["LESSON_ID", "LessonId", "lessonId"])))
+    );
+    return Math.round((done.size / lessonsList.length) * 100);
+  }
+
+  function isLessonDone(lessonId) {
+    return studentProgress.some(p =>
+      String(getField(p, ["LESSON_ID", "LessonId", "lessonId"])) === String(lessonId) &&
+      ["DONE", "COMPLETED"].includes(String(getField(p, ["STATUS", "Status", "status"])).toUpperCase())
+    );
+  }
+
+  async function markLessonDone(lessonId, courseId) {
+    if (!currentUser) return;
+    try {
+      await api("saveProgress", {
+        userId: currentUser.USER_ID || currentUser.userId,
+        courseId: courseId || "",
+        lessonId,
+        status: "DONE",
+        score: "100"
+      });
+      await loadStudentProgress();
+      updateLessonsDOM();
+    } catch (error) {
+      alert(error.message || "Could not save progress.");
+    }
+  }
+
+  async function loginUser() {
+    const emailOrUsername = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value.trim();
+
+    if (!emailOrUsername || !password) {
+      alert("Email/username and password required.");
+      return;
+    }
+
+    try {
+      const data = await api("loginUser", { emailOrUsername, password });
+      currentUser = normaliseUser(data.user);
+      renderApp();
+    } catch (error) {
+      alert(error.message || "Login failed.");
+    }
+  }
+
+  async function registerStudent() {
+    const fullName = document.getElementById("regFullName").value.trim();
+    const username = document.getElementById("regUsername").value.trim();
+    const email = document.getElementById("regEmail").value.trim();
+    const password = document.getElementById("regPassword").value.trim();
+
+    if (!fullName || !username || !email || !password) {
+      alert("Please complete all registration fields.");
+      return;
+    }
+
+    try {
+      const data = await api("registerUser", {
+        fullName,
+        username,
+        email,
+        password,
+        role: "STUDENT"
+      });
+      currentUser = normaliseUser(data.user);
+      renderApp();
+    } catch (error) {
+      alert(error.message || "Registration failed.");
+    }
+  }
+
+  function logoutUser() {
+    currentUser = null;
+    studentProgress = [];
+    progressSummary = [];
+    allUsers = [];
+    renderApp();
+  }
+
+  function normaliseUser(user) {
+    user = user || {};
+    const role = String(user.ROLE || user.role || "STUDENT").toUpperCase();
+    return {
+      ...user,
+      USER_ID: user.USER_ID || user.userId || "",
+      FULL_NAME: user.FULL_NAME || user.fullName || "",
+      USERNAME: user.USERNAME || user.username || "",
+      EMAIL: user.EMAIL || user.email || "",
+      ROLE: role,
+      role,
+      isAdmin: role === "ADMIN"
+    };
+  }
+
+  function toggleAuthMode(mode) {
+    const loginBox = document.getElementById("loginBox");
+    const registerBox = document.getElementById("registerBox");
+    if (!loginBox || !registerBox) return;
+    loginBox.style.display = mode === "login" ? "block" : "none";
+    registerBox.style.display = mode === "register" ? "block" : "none";
+  }
+
+  function renderAuthOverlay() {
+    return `
+      <div class="auth-overlay">
+        <div class="auth-card">
+          <div id="loginBox">
+            <h2>Login</h2>
+            <input id="loginEmail" type="text" placeholder="Email or username" />
+            <input id="loginPassword" type="password" placeholder="Password" />
+            <button onclick="loginUser()">Login</button>
+            <div class="toggle-auth" onclick="toggleAuthMode('register')">Student? Register here</div>
+          </div>
+
+          <div id="registerBox" style="display:none;">
+            <h2>Student Registration</h2>
+            <input id="regFullName" type="text" placeholder="Full name" />
+            <input id="regUsername" type="text" placeholder="Username" />
+            <input id="regEmail" type="email" placeholder="Email" />
+            <input id="regPassword" type="password" placeholder="Password" />
+            <button onclick="registerStudent()">Register & Start Learning</button>
+            <div class="toggle-auth" onclick="toggleAuthMode('login')">Already registered? Login</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStudentPanel() {
+    const percent = getStudentProgressPercent();
+    const doneCount = studentProgress.filter(p => ["DONE", "COMPLETED"].includes(String(getField(p, ["STATUS", "Status", "status"])).toUpperCase())).length;
+
+    return `
+      <div class="admin-panel" style="margin-top:1rem;">
+        <h3><i class="fas fa-chart-line"></i> My Learning Progress</h3>
+        <div class="progress-wrap"><div class="progress-bar" style="width:${percent}%;"></div></div>
+        <strong>${percent}% Complete</strong>
+        <div class="small-muted">${doneCount} of ${lessonsList.length} lessons completed.</div>
+      </div>
+    `;
+  }
+
+  function renderTeacherAdminStats() {
+    const studentCount = progressSummary.length || allUsers.filter(u => String(getField(u, ["ROLE", "Role", "role"])).toUpperCase() === "STUDENT").length;
+    const rows = progressSummary.length ? progressSummary.map(s => `
+      <div class="stats-card">
+        <strong>${escapeHtml(s.fullName || s.email || s.username || "Student")}</strong>
+        <div class="progress-wrap"><div class="progress-bar" style="width:${Number(s.percent || 0)}%;"></div></div>
+        <div class="small-muted">${Number(s.percent || 0)}% complete | ${s.completed || 0}/${s.totalLessons || lessonsList.length} lessons</div>
+      </div>
+    `).join("") : `<div class="small-muted">No student progress recorded yet.</div>`;
+
+    return `
+      <div class="admin-panel" style="margin-top:1rem;">
+        <h3><i class="fas fa-users"></i> Student Enrolment & Progress</h3>
+        <strong>${studentCount}</strong> enrolled student(s)
+        ${rows}
+      </div>
+    `;
+  }
+
+  
   function renderApp() {
     const root = document.getElementById("appRoot");
+    if (!currentUser) {
+      root.innerHTML = renderAuthOverlay();
+      return;
+    }
     root.innerHTML = renderDashboard();
     attachDashboardEvents();
     initialiseSheets().then((ok) => { if (ok) loadLessons(); else updateLessonsDOM(); }).catch(() => updateLessonsDOM());
   }
 
   function renderDashboard() {
-    const isAdmin = currentUser?.isAdmin === true;
+    const role = String(currentUser?.role || currentUser?.ROLE || "STUDENT").toUpperCase();
+    const isAdmin = role === "ADMIN";
+    const isTeacher = role === "TEACHER";
+    const canUpload = isAdmin || isTeacher;
     return `
       <div class="brand-header">
         <div class="logo"><h1>📘 Onpoint Group School</h1><p>Interactive E-Learning</p></div>
         <div style="display:flex; gap:12px; align-items:center;">
-          <span class="user-welcome"><i class="fas fa-user-graduate"></i> ${currentUser.email} ${isAdmin ? '<span class="admin-badge">Admin</span>' : ''}</span>
+          <span class="user-welcome"><i class="fas fa-user-graduate"></i> ${escapeHtml(currentUser.FULL_NAME || currentUser.EMAIL || currentUser.email || "User")} <span class="admin-badge">${role}</span></span>
+          <button class="logout-btn" onclick="logoutUser()">Logout</button>
         </div>
       </div>
       <div class="dashboard">
@@ -503,7 +752,9 @@
           <p style="margin: 1rem 0;">Free video lessons. Click start to watch.</p>
           <div id="connectionStatus" class="sheet-info">⏳ Checking Google Sheet connection...</div>
           <button id="setupSheetsBtn" style="width:100%; margin-top:10px; background:#0b2b40; color:white; border:none; padding:10px; border-radius:30px; font-weight:600; cursor:pointer;">Generate / Repair Sheet Tabs & Headings</button>
-          ${isAdmin ? `
+          ${role === "STUDENT" ? renderStudentPanel() : ""}
+          ${canUpload ? renderTeacherAdminStats() : ""}
+          ${canUpload ? `
             <div class="admin-panel" style="margin-top:1rem;">
               <h3><i class="fas fa-upload"></i> Admin Upload Video</h3>
               <input type="text" id="lessonTitle" placeholder="Lesson Title" />
@@ -557,10 +808,10 @@
           DESCRIPTION: desc,
           CONTENT: desc,
           VIDEO_LINK: videoLink,
-          CREATED_BY: "Admin",
+          CREATED_BY: currentUser?.FULL_NAME || currentUser?.EMAIL || "Admin",
           DATE_CREATED: now,
           VIDEO_ID: "VID_" + Date.now(),
-          UPLOADED_BY: "Admin"
+          UPLOADED_BY: currentUser?.FULL_NAME || currentUser?.EMAIL || "Admin"
         };
 
         const saved = await addLessonToSheet(newLesson);
@@ -573,12 +824,44 @@
     }
 
     window.startLesson = (videoUrl) => {
-      if (!videoUrl) { alert("No video link found. Please make sure this lesson row has a VIDEO_LINK value in the LESSONS tab."); return; }
+      if (!videoUrl) {
+        alert("No video link found. Please make sure this lesson row has a VIDEO_LINK value in the LESSONS tab.");
+        return;
+      }
+
       let embedUrl = String(videoUrl).trim();
+
+      // Google Drive share links must use /preview inside iframe.
       if (embedUrl.includes("drive.google.com")) {
         const match = embedUrl.match(/\/d\/([^/]+)/) || embedUrl.match(/[?&]id=([^&]+)/);
         if (match) embedUrl = `https://drive.google.com/file/d/${match[1]}/preview`;
       }
+
+      // YouTube normal watch/share/shorts links refuse iframe connection unless converted to /embed/.
+      if (embedUrl.includes("youtube.com") || embedUrl.includes("youtu.be")) {
+        let videoId = "";
+
+        try {
+          const url = new URL(embedUrl);
+
+          if (url.hostname.includes("youtu.be")) {
+            videoId = url.pathname.replace("/", "").split("?")[0];
+          } else if (url.pathname.includes("/watch")) {
+            videoId = url.searchParams.get("v") || "";
+          } else if (url.pathname.includes("/shorts/")) {
+            videoId = url.pathname.split("/shorts/")[1].split("/")[0].split("?")[0];
+          } else if (url.pathname.includes("/embed/")) {
+            videoId = url.pathname.split("/embed/")[1].split("/")[0].split("?")[0];
+          }
+
+          if (videoId) {
+            embedUrl = `https://www.youtube.com/embed/${videoId}`;
+          }
+        } catch (e) {
+          console.warn("Could not parse YouTube link:", e);
+        }
+      }
+
       const modal = document.getElementById("videoModal");
       const iframe = document.getElementById("lessonIframe");
       iframe.src = embedUrl;
@@ -611,6 +894,11 @@
           <div class="lesson-title">${escapeHtml(lesson.title)}</div>
           <div class="lesson-desc">${escapeHtml(lesson.desc || "No description")}</div>
           <button class="btn-start" data-video="${escapeAttr(lesson.videoLink || "")}"><i class="fas fa-play"></i> Start Lesson</button>
+          ${String(currentUser?.role || currentUser?.ROLE || "").toUpperCase() === "STUDENT" ? `
+            <button class="btn-secondary btn-done" data-lesson="${escapeAttr(lesson.id)}" data-course="${escapeAttr(lesson.courseId || "")}">
+              ${isLessonDone(lesson.id) ? "✅ Done" : "Mark Done"}
+            </button>
+          ` : ""}
         </div>
       </div>
     `).join("");
@@ -619,6 +907,12 @@
       btn.addEventListener("click", () => {
         const videoUrl = btn.getAttribute("data-video");
         if (window.startLesson) window.startLesson(videoUrl);
+      });
+    });
+
+    document.querySelectorAll(".btn-done").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await markLessonDone(btn.getAttribute("data-lesson"), btn.getAttribute("data-course"));
       });
     });
   }
